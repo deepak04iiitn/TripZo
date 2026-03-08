@@ -1,0 +1,178 @@
+tripzo/
+│
+├── mobile/                 # Expo React Native App
+├── server/                 # Node.js + Express Backend
+├── docs/                   # PRD, architecture docs
+├── scripts/                # deployment scripts
+│
+├── .env
+├── README.md
+└── package.json
+
+
+
+mobile/
+│
+├── app/                    # Expo Router screens
+│
+│   ├── (tabs)/
+│   │   ├── index.jsx       # Home
+│   │   ├── trips.jsx
+│   │   ├── create-trip.jsx
+│   │   └── profile.jsx
+│
+│   ├── itinerary/
+│   │   └── [tripId].jsx
+│
+│   ├── map/
+│   │   └── map-view.jsx
+│
+│   ├── auth/
+│   │   ├── login.jsx
+│   │   └── signup.jsx
+│
+│   └── _layout.jsx         # navigation layout
+│
+│
+├── src/
+│
+│   ├── assets/
+│   │   ├── images/
+│   │   ├── icons/
+│   │   └── illustrations/
+│
+│   ├── components/
+│   │
+│   │   ├── common/
+│   │   │   ├── Button.jsx
+│   │   │   ├── Card.jsx
+│   │   │   ├── Loader.jsx
+│   │   │   └── Modal.jsx
+│   │
+│   │   ├── map/
+│   │   │   ├── MapView.jsx
+│   │   │   ├── RoutePolyline.jsx
+│   │   │   ├── PlaceMarker.jsx
+│   │   │   └── UserLocationMarker.jsx
+│   │
+│   │   ├── itinerary/
+│   │   │   ├── PlaceCard.jsx
+│   │   │   ├── RestaurantSuggestion.jsx
+│   │   │   ├── ATMSuggestion.jsx
+│   │   │   └── TripProgressBar.jsx
+│   │
+│   │   └── reviews/
+│   │       ├── ReviewCard.jsx
+│   │       └── TipCard.jsx
+│
+│
+│   ├── services/
+│   │
+│   │   ├── api/
+│   │   │   └── apiClient.js
+│   │
+│   │   ├── maps/
+│   │   │   └── googleMapsService.js
+│   │
+│   │   ├── itinerary/
+│   │   │   └── itineraryService.js
+│   │
+│   │   └── auth/
+│   │       └── firebaseAuthService.js
+│
+│
+│   ├── store/
+│   │   ├── tripStore.js
+│   │   └── userStore.js
+│
+│
+│   ├── hooks/
+│   │   ├── useLocation.js
+│   │   └── useTripProgress.js
+│
+│
+│   ├── utils/
+│   │   ├── distance.js
+│   │   ├── timeFormatter.js
+│   │   └── constants.js
+│
+│
+│   ├── theme/
+│   │   ├── colors.js
+│   │   ├── typography.js
+│   │   └── spacing.js
+│
+│
+│   └── types/              # optional even in JS (for JSDoc)
+│       ├── itineraryTypes.js
+│       ├── userTypes.js
+│       └── reviewTypes.js
+│
+│
+├── App.js
+├── app.json
+├── babel.config.js
+├── metro.config.js
+└── package.json
+
+
+
+server/
+│
+├── src/
+│
+│   ├── config/
+│   │   ├── db.js
+│   │   ├── firebase.js
+│   │   └── env.js
+│
+│
+│   ├── controllers/
+│   │   ├── itineraryController.js
+│   │   ├── placesController.js
+│   │   ├── reviewController.js
+│   │   └── userController.js
+│
+│
+│   ├── routes/
+│   │   ├── itineraryRoutes.js
+│   │   ├── placesRoutes.js
+│   │   ├── reviewRoutes.js
+│   │   └── userRoutes.js
+│
+│
+│   ├── models/
+│   │   ├── User.js
+│   │   ├── Itinerary.js
+│   │   ├── PlaceReview.js
+│   │   └── TripProgress.js
+│
+│
+│   ├── services/
+│   │   ├── itineraryService.js
+│   │   ├── googleMapsService.js
+│   │   ├── optimizationService.js
+│   │   └── recommendationService.js
+│
+│
+│   ├── algorithms/
+│   │   ├── tspNearestNeighbor.js
+│   │   ├── twoOptOptimization.js
+│   │   └── multiDayPlanner.js
+│
+│
+│   ├── middleware/
+│   │   ├── authMiddleware.js
+│   │   └── errorHandler.js
+│
+│
+│   ├── utils/
+│   │   ├── distanceCalculator.js
+│   │   ├── timeEstimator.js
+│   │   └── logger.js
+│
+│
+│   └── app.js
+│
+├── server.js
+└── package.json
