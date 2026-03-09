@@ -6,16 +6,14 @@ import {
   Dimensions,
   TouchableOpacity,
   FlatList,
-  Image,
+  PanResponder,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Svg1 from '../assets/svg-1.svg';
 import Svg2 from '../assets/svg-2.svg';
-import Svg3 from '../assets/svg-3.svg';
 
-const Logo = require('../assets/TripZo_Logo.png');
 
 const { width, height } = Dimensions.get('window');
 
@@ -36,23 +34,15 @@ const slides = [
     titleLight: 'EXPLORE MORE,',
     titleBold:  'WASTE LESS TIME.',
     description:
-      "TripZo's smart route optimization cuts unnecessary transit by up to 40% — so you see more of what matters and spend less time travelling between stops.",
+      "Stop wasting hours on back-and-forth routes. TripZo auto-builds optimized itineraries around your location, time, and interests — cutting transit by up to 40% so you see far more of what matters.",
   },
   {
     id: '2',
     Svg: Svg2,
-    titleLight: 'PLAN YOUR',
-    titleBold:  'PERFECT TRIP.',
+    titleLight: 'YOUR PERFECT TRIP,',
+    titleBold:  'FULLY AUTOMATED.',
     description:
-      'Generate full multi-day itineraries in seconds. Attractions clustered by area, meal slots auto-inserted, and opening hours verified — all done for you.',
-  },
-  {
-    id: '3',
-    Svg: Svg3,
-    titleLight: 'TRAVEL',
-    titleBold:  'SMARTER.',
-    description:
-      'Live trip progress, real traveller tips, nearby restaurants and ATMs — everything you need for an unforgettable journey, in one smart companion.',
+      "Multi-day plans, restaurant slots, nearby ATMs, live trip progress, real traveller tips, and one-tap sharing — every tool a modern traveller needs, beautifully unified in one app.",
   },
 ];
 
@@ -74,6 +64,31 @@ export default function OnboardingScreen({ onFinish }) {
     }
   };
 
+  // navigateRef is updated every render so the PanResponder always reads
+  // the latest currentIndex — avoids the stale closure problem.
+  const navigateRef = useRef(null);
+  navigateRef.current = (dx) => {
+    if (dx < -40) {
+      if (currentIndex < slides.length - 1) {
+        flatListRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
+        setCurrentIndex(currentIndex + 1);
+      } else {
+        onFinish?.();
+      }
+    } else if (dx > 40 && currentIndex > 0) {
+      flatListRef.current?.scrollToIndex({ index: currentIndex - 1, animated: true });
+      setCurrentIndex(currentIndex - 1);
+    }
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, { dx, dy }) =>
+        Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy),
+      onPanResponderRelease: (_, { dx }) => navigateRef.current(dx),
+    })
+  ).current;
+
   const onViewableItemsChanged = useRef(({ viewableItems }) => {
     if (viewableItems.length > 0) {
       setCurrentIndex(viewableItems[0].index);
@@ -89,16 +104,6 @@ export default function OnboardingScreen({ onFinish }) {
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        <View style={styles.logoWrapper}>
-          <Image source={Logo} style={styles.logo} resizeMode="contain" />
-        </View>
-
-        <View style={styles.taglinePill}>
-          <Text style={styles.taglineText}>
-            Explore More. Waste Less Time. Travel Smart.
-          </Text>
-        </View>
-
         <SvgIllustration
           width={width * 0.82}
           height={height * 0.33}
@@ -129,8 +134,8 @@ export default function OnboardingScreen({ onFinish }) {
         style={{ height: ILLUSTRATION_H }}
       />
 
-      {/* Bottom sheet — absolutely anchored to the screen bottom, overlaps illustration */}
-      <View style={styles.whitePanel}>
+      {/* Bottom sheet — swipe gestures forwarded to FlatList via PanResponder */}
+      <View style={styles.whitePanel} {...panResponder.panHandlers}>
         <View style={styles.textArea}>
           <Text style={styles.titleLight}>{slide.titleLight}</Text>
           <Text style={styles.titleBold}>{slide.titleBold}</Text>
@@ -157,7 +162,7 @@ export default function OnboardingScreen({ onFinish }) {
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
               >
-                <Text style={styles.ctaText}>GET STARTED</Text>
+                <Text style={styles.ctaText}>START</Text>
               </LinearGradient>
             </TouchableOpacity>
           ) : (
@@ -191,32 +196,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     paddingBottom: height * 0.14,
-  },
-  logoWrapper: {
-    position: 'absolute',
-    top: 52,
-    left: 24,
-  },
-  logo: {
-    width: 112,
-    height: 38,
-  },
-  taglinePill: {
-    position: 'absolute',
-    top: 60,
-    right: 20,
-    backgroundColor: 'rgba(255,255,255,0.22)',
-    borderRadius: 100,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    maxWidth: 160,
-  },
-  taglineText: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    letterSpacing: 0.3,
-    textAlign: 'center',
   },
   svgImage: {
     marginBottom: 4,

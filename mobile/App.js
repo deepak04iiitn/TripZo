@@ -1,12 +1,19 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import SplashScreen from './screens/SplashScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 
-export default function App() {
-  const [onboarded, setOnboarded] = useState(false);
+const SCREEN = { SPLASH: 'splash', ONBOARDING: 'onboarding', MAIN: 'main' };
 
-  if (!onboarded) {
-    return <OnboardingScreen onFinish={() => setOnboarded(true)} />;
+export default function App() {
+  const [screen, setScreen] = useState(SCREEN.SPLASH);
+
+  if (screen === SCREEN.SPLASH) {
+    return <SplashScreen onDone={() => setScreen(SCREEN.ONBOARDING)} />;
+  }
+
+  if (screen === SCREEN.ONBOARDING) {
+    return <OnboardingScreen onFinish={() => setScreen(SCREEN.MAIN)} />;
   }
 
   return (
@@ -26,6 +33,6 @@ const styles = StyleSheet.create({
   text: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#3B82F6',
+    color: '#FF6B6B',
   },
 });
