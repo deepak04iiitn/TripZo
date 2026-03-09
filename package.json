@@ -1,5 +1,5 @@
 {
-  "name": "TripZO",
+  "name": "TripZo",
   "version": "1.0.0",
   "main": "index.js",
   "directories": {
@@ -7,8 +7,8 @@
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:mobile": "npm --workspace mobile run start",
-    "dev:server": "npm --workspace server run dev",
+    "dev:mobile": "cd mobile && npm run start",
+    "dev:server": "cd server && npm run dev",
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:mobile\""
   },
   "keywords": [],
@@ -16,10 +16,6 @@
   "license": "ISC",
   "description": "",
   "private": true,
-  "workspaces": [
-    "mobile",
-    "server"
-  ],
   "devDependencies": {
     "concurrently": "^9.2.1"
   }
