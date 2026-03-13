@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 // import * as Google from 'expo-auth-session/providers/google';
 // import * as WebBrowser from 'expo-web-browser';
 // import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
@@ -7,6 +7,7 @@ import SplashScreen from './screens/SplashScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
+import MainTabNavigator from './src/navigation/MainTabNavigator';
 import { getMe, signin, signup } from './src/services/auth/authService';
 import {
   clearSession,
@@ -179,13 +180,7 @@ export default function App() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome, {user?.username || 'Traveler'}!</Text>
-      <Text style={styles.subtitle}>{user?.email}</Text>
-      <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
-        <Text style={styles.logoutText}>Logout</Text>
-      </TouchableOpacity>
-    </View>
+    <MainTabNavigator user={user} onLogout={handleLogout} />
   );
 }
 
@@ -195,33 +190,5 @@ const styles = StyleSheet.create({
     backgroundColor: '#F8F9FC',
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  container: {
-    flex: 1,
-    backgroundColor: '#F8F9FC',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#0F2044',
-  },
-  subtitle: {
-    marginTop: 8,
-    fontSize: 16,
-    color: '#5B677D',
-    marginBottom: 20,
-  },
-  logoutButton: {
-    backgroundColor: '#0F2044',
-    borderRadius: 14,
-    paddingHorizontal: 26,
-    paddingVertical: 12,
-  },
-  logoutText: {
-    color: '#FFFFFF',
-    fontWeight: '700',
   },
 });
