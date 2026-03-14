@@ -3,6 +3,7 @@ import cors from 'cors';
 import authRoutes from './routes/authRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { connectToDatabase } from './config/database.js';
 import { getUploadsStaticDir } from './utils/uploadPaths.js';
 import {
   burstRateLimiter,
@@ -22,6 +23,15 @@ app.use('/uploads', express.static(getUploadsStaticDir()));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'tripzo-server' });
+});
+
+app.use(async (_req, _res, next) => {
+  try {
+    await connectToDatabase();
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use('/api/auth', authRoutes);
