@@ -1,4 +1,8 @@
 import axios from 'axios';
+import GeocodeCache from '../models/GeocodeCache.js';
+import ItineraryCache from '../models/ItineraryCache.js';
+import PlaceCache from '../models/PlaceCache.js';
+import { assertCanGenerateNewItinerary, recordGoogleApiUsageCost } from './creditGuardService.js';
 
 const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY;
 
@@ -27,6 +31,8 @@ const BUDGET_RANGES = {
   $$: { min: 2, max: 3 },
   $$$: { min: 3, max: 4 },
 };
+
+const COORDINATE_CACHE_PRECISION = 3;
 
 const CATEGORY_VISIT_MINUTES = {
   museum: 70,
@@ -73,13 +79,114 @@ function buildStopsPerDayTargets(totalStops, durationDays) {
   return Array.from({ length: durationDays }, (_unused, index) => base + (index < remainder ? 1 : 0));
 }
 
+// ─── Cache helpers ────────────────────────────────────────────────────────────
+
+function toRoundedCoordinate(value, precision = COORDINATE_CACHE_PRECISION) {
+  if (!Number.isFinite(value)) return null;
+  return Number(value.toFixed(precision));
+}
+
+function normalizeLocationName(value = '') {
+  return String(value || '')
+    .toLowerCase()
+    .trim()
+    .replace(/,?\s*india$/i, '')
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function buildLocationKey(latitude, longitude) {
+  const lat = toRoundedCoordinate(latitude);
+  const lng = toRoundedCoordinate(longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  return `${lat}:${lng}`;
+}
+
+function normalizeCachedPlaces(places = []) {
+  return places.map((place) => ({
+    place_id: place.placeId || '',
+    name: place.name || '',
+    types: Array.isArray(place.types) ? place.types : [],
+    geometry: {
+      location: {
+        lat: place.latitude,
+        lng: place.longitude,
+      },
+    },
+    rating: place.rating ?? undefined,
+    user_ratings_total: place.userRatingsTotal ?? undefined,
+    price_level: place.priceLevel ?? undefined,
+    photos: place.photoReference ? [{ photo_reference: place.photoReference }] : [],
+  }));
+}
+
+function normalizePlacesForCache(places = []) {
+  return places
+    .filter((place) => Number.isFinite(place?.geometry?.location?.lat) && Number.isFinite(place?.geometry?.location?.lng))
+    .map((place) => ({
+      placeId: place.place_id || '',
+      name: place.name || '',
+      types: Array.isArray(place.types) ? place.types : [],
+      latitude: place.geometry.location.lat,
+      longitude: place.geometry.location.lng,
+      rating: Number.isFinite(place.rating) ? place.rating : null,
+      userRatingsTotal: Number.isFinite(place.user_ratings_total) ? place.user_ratings_total : null,
+      priceLevel: Number.isFinite(place.price_level) ? place.price_level : null,
+      photoReference: place.photos?.[0]?.photo_reference || '',
+    }));
+}
+
+function getCandidateFromLabels(payload = {}) {
+  const labels = [
+    payload?.fromLocation?.text,
+    payload?.fromLocation?.selected?.label,
+    payload?.fromLocation?.label,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return [...new Set(labels)];
+}
+
+function getCoordinatesFromPayload(payload = {}) {
+  const selected = payload?.fromLocation?.selected || {};
+  if (Number.isFinite(selected.latitude) && Number.isFinite(selected.longitude)) {
+    return { latitude: selected.latitude, longitude: selected.longitude };
+  }
+  if (Number.isFinite(payload?.fromLocation?.latitude) && Number.isFinite(payload?.fromLocation?.longitude)) {
+    return { latitude: payload.fromLocation.latitude, longitude: payload.fromLocation.longitude };
+  }
+  return null;
+}
+
 // ─── Google Geocoding ────────────────────────────────────────────────────────
 
 async function geocodeWithGoogle(query) {
+  const rawQuery = String(query || '').trim();
+  const normalizedQuery = normalizeLocationName(rawQuery);
+  if (!normalizedQuery) {
+    throw httpError('Location query is required.', 400);
+  }
+
+  const cached = await GeocodeCache.findOne({
+    $or: [{ normalizedName: normalizedQuery }, { aliases: normalizedQuery }],
+  }).lean();
+  if (cached) {
+    return {
+      label: cached.locationName || rawQuery,
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+      source: 'cache',
+    };
+  }
+
   const response = await axios.get(GEOCODING_URL, {
-    params: { address: query.trim(), key: GOOGLE_KEY },
+    params: { address: rawQuery, key: GOOGLE_KEY },
     timeout: 10000,
   });
+  await recordGoogleApiUsageCost({ apiType: 'geocode', requestCount: 1 });
 
   const result = response.data?.results?.[0];
   if (!result) throw httpError(`Could not find coordinates for "${query}".`, 400);
@@ -91,29 +198,65 @@ async function geocodeWithGoogle(query) {
     find('sublocality') ||
     find('locality') ||
     result.formatted_address.split(',')[0] ||
-    query;
+    rawQuery;
+
+  const latitude = result.geometry.location.lat;
+  const longitude = result.geometry.location.lng;
+  const latitudeRounded = toRoundedCoordinate(latitude);
+  const longitudeRounded = toRoundedCoordinate(longitude);
+  const formattedAddress = result.formatted_address || '';
+  const canonicalNormalizedName = normalizeLocationName(formattedAddress || label || rawQuery);
+
+  await GeocodeCache.findOneAndUpdate(
+    { normalizedName: canonicalNormalizedName || normalizedQuery },
+    {
+      locationName: label,
+      normalizedName: canonicalNormalizedName || normalizedQuery,
+      latitude,
+      longitude,
+      latitudeRounded,
+      longitudeRounded,
+      formattedAddress,
+      source: 'google',
+      $addToSet: {
+        aliases: { $each: [normalizedQuery, canonicalNormalizedName].filter(Boolean) },
+      },
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
 
   return {
     label,
-    latitude: result.geometry.location.lat,
-    longitude: result.geometry.location.lng,
+    latitude,
+    longitude,
     source: 'manual',
   };
 }
 
 async function reverseGeocodeWithGoogle(latitude, longitude) {
   try {
+    const latitudeRounded = toRoundedCoordinate(latitude);
+    const longitudeRounded = toRoundedCoordinate(longitude);
+    const cached = await GeocodeCache.findOne({
+      latitudeRounded,
+      longitudeRounded,
+    }).lean();
+    if (cached?.locationName) {
+      return cached.locationName;
+    }
+
     const response = await axios.get(GEOCODING_URL, {
       params: { latlng: `${latitude},${longitude}`, key: GOOGLE_KEY },
       timeout: 10000,
     });
+    await recordGoogleApiUsageCost({ apiType: 'geocode', requestCount: 1 });
 
     const result = response.data?.results?.[0];
     if (!result) return 'Local Area';
 
     const components = result.address_components || [];
     const find = (type) => components.find((c) => c.types.includes(type))?.long_name;
-    return (
+    const label = (
       find('sublocality_level_1') ||
       find('sublocality') ||
       find('locality') ||
@@ -121,6 +264,30 @@ async function reverseGeocodeWithGoogle(latitude, longitude) {
       result.formatted_address.split(',')[0] ||
       'Local Area'
     );
+    const formattedAddress = result.formatted_address || '';
+    const canonicalNormalizedName = normalizeLocationName(formattedAddress || label);
+
+    await GeocodeCache.findOneAndUpdate(
+      { normalizedName: canonicalNormalizedName || normalizeLocationName(label) },
+      {
+        locationName: label,
+        normalizedName: canonicalNormalizedName || normalizeLocationName(label),
+        latitude,
+        longitude,
+        latitudeRounded,
+        longitudeRounded,
+        formattedAddress,
+        source: 'google_reverse',
+        $addToSet: {
+          aliases: {
+            $each: [normalizeLocationName(label), canonicalNormalizedName].filter(Boolean),
+          },
+        },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+
+    return label;
   } catch (_error) {
     return 'Local Area';
   }
@@ -128,21 +295,73 @@ async function reverseGeocodeWithGoogle(latitude, longitude) {
 
 // ─── Google Places Nearby Search ─────────────────────────────────────────────
 
-async function googleNearbySearch({ latitude, longitude, radiusMeters, type, keyword }) {
-  const params = {
-    location: `${latitude},${longitude}`,
-    radius: radiusMeters,
-    key: GOOGLE_KEY,
+async function getCachedNearbyPlaces({ latitude, longitude, radiusMeters, type, keyword, maxPages = 1 }) {
+  const latitudeRounded = toRoundedCoordinate(latitude);
+  const longitudeRounded = toRoundedCoordinate(longitude);
+  const locationKey = buildLocationKey(latitude, longitude);
+  const geocodeMatch = await GeocodeCache.findOne({ latitudeRounded, longitudeRounded }).lean();
+  const normalizedLocationName =
+    normalizeLocationName(geocodeMatch?.locationName || geocodeMatch?.formattedAddress || '') || locationKey;
+  const query = {
+    locationKey,
+    radiusMeters,
+    type: String(type || ''),
+    keyword: String(keyword || ''),
+    maxPages,
   };
-  if (type) params.type = type;
-  if (keyword) params.keyword = keyword;
 
-  const response = await axios.get(PLACES_NEARBY_URL, { params, timeout: 15000 });
-  const status = response.data?.status;
-  if (status !== 'OK' && status !== 'ZERO_RESULTS') {
-    throw new Error(`Places API error: ${status}`);
+  const cached = await PlaceCache.findOne(query).lean();
+  if (cached) {
+    return normalizeCachedPlaces(cached.places);
   }
-  return response.data?.results || [];
+
+  const allResults = [];
+  let nextPageToken = null;
+  let page = 0;
+  do {
+    const params = nextPageToken
+      ? { pagetoken: nextPageToken, key: GOOGLE_KEY }
+      : {
+          location: `${latitude},${longitude}`,
+          radius: radiusMeters,
+          key: GOOGLE_KEY,
+          ...(type ? { type } : {}),
+          ...(keyword ? { keyword } : {}),
+        };
+
+    if (nextPageToken) {
+      await sleep(1800);
+    }
+
+    const response = await axios.get(PLACES_NEARBY_URL, { params, timeout: 15000 });
+    await recordGoogleApiUsageCost({ apiType: 'places_nearby', requestCount: 1 });
+    const status = response.data?.status;
+    if (status !== 'OK' && status !== 'ZERO_RESULTS' && status !== 'INVALID_REQUEST') {
+      throw new Error(`Places API error: ${status}`);
+    }
+    allResults.push(...(response.data?.results || []));
+    nextPageToken = response.data?.next_page_token || null;
+    page += 1;
+  } while (nextPageToken && page < maxPages);
+
+  await PlaceCache.findOneAndUpdate(
+    query,
+    {
+      ...query,
+      normalizedLocationName,
+      latitudeRounded,
+      longitudeRounded,
+      source: 'google_places',
+      places: normalizePlacesForCache(allResults),
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+
+  return allResults;
+}
+
+async function googleNearbySearch({ latitude, longitude, radiusMeters, type, keyword }) {
+  return getCachedNearbyPlaces({ latitude, longitude, radiusMeters, type, keyword, maxPages: 1 });
 }
 
 const GOOGLE_TYPE_TO_CATEGORY = {
@@ -232,36 +451,11 @@ function sleep(ms) {
 }
 
 async function googleNearbySearchAllPages({ latitude, longitude, radiusMeters, type, keyword, maxPages = 1 }) {
-  const allResults = [];
-  let nextPageToken = null;
-  let page = 0;
-
-  do {
-    const params = nextPageToken
-      ? { pagetoken: nextPageToken, key: GOOGLE_KEY }
-      : {
-          location: `${latitude},${longitude}`,
-          radius: radiusMeters,
-          key: GOOGLE_KEY,
-          ...(type ? { type } : {}),
-          ...(keyword ? { keyword } : {}),
-        };
-
-    if (nextPageToken) {
-      await sleep(1800);
-    }
-
-    const response = await axios.get(PLACES_NEARBY_URL, { params, timeout: 15000 });
-    const status = response.data?.status;
-    if (status !== 'OK' && status !== 'ZERO_RESULTS' && status !== 'INVALID_REQUEST') {
-      break;
-    }
-    allResults.push(...(response.data?.results || []));
-    nextPageToken = response.data?.next_page_token || null;
-    page += 1;
-  } while (nextPageToken && page < maxPages);
-
-  return allResults;
+  try {
+    return await getCachedNearbyPlaces({ latitude, longitude, radiusMeters, type, keyword, maxPages });
+  } catch (_error) {
+    return [];
+  }
 }
 
 function normalizeGooglePlace(place) {
@@ -458,6 +652,10 @@ async function getDistanceMatrix(points) {
       },
       timeout: 15000,
     });
+    await recordGoogleApiUsageCost({
+      apiType: 'distance_matrix',
+      elementCount: points.length * points.length,
+    });
 
     const data = response.data;
     if (data.status !== 'OK' || !data.rows?.length) {
@@ -643,9 +841,97 @@ async function fetchSmartRecommendation(amenity, stop, radiusMeters, fallbackLab
   };
 }
 
+async function findCachedItinerary(payload) {
+  const startDate = payload.startDate || toIsoDate(new Date());
+  const endDate = payload.endDate || startDate;
+  const durationDays = getDaysInclusive(startDate, endDate);
+  const budget = payload?.budget;
+  const normalizedFromCandidates = getCandidateFromLabels(payload).map((label) => normalizeLocationName(label));
+
+  if (normalizedFromCandidates.length) {
+    const cachedByName = await ItineraryCache.findOne({
+      normalizedFromLocation: { $in: normalizedFromCandidates },
+      durationDays,
+      budget,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (cachedByName?.itineraryData) {
+      return cachedByName.itineraryData;
+    }
+  }
+
+  const coordinates = getCoordinatesFromPayload(payload);
+  if (coordinates) {
+    const fromLatitudeRounded = toRoundedCoordinate(coordinates.latitude);
+    const fromLongitudeRounded = toRoundedCoordinate(coordinates.longitude);
+    const cachedByCoordinates = await ItineraryCache.findOne({
+      fromLatitudeRounded,
+      fromLongitudeRounded,
+      durationDays,
+      budget,
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+    if (cachedByCoordinates?.itineraryData) {
+      return cachedByCoordinates.itineraryData;
+    }
+  }
+
+  return null;
+}
+
+async function saveItineraryToCache(payload, itineraryData) {
+  const startDate = payload.startDate || toIsoDate(new Date());
+  const endDate = payload.endDate || startDate;
+  const durationDays = getDaysInclusive(startDate, endDate);
+  const budget = payload?.budget;
+  const fromLabel = itineraryData?.from?.label || getCandidateFromLabels(payload)[0] || '';
+  const normalizedFromLocation = normalizeLocationName(fromLabel);
+  const coordinates = itineraryData?.from
+    ? { latitude: itineraryData.from.latitude, longitude: itineraryData.from.longitude }
+    : getCoordinatesFromPayload(payload);
+
+  const fromLatitudeRounded = toRoundedCoordinate(coordinates?.latitude);
+  const fromLongitudeRounded = toRoundedCoordinate(coordinates?.longitude);
+  const toLabel = String(
+    payload?.toLocation?.text || payload?.toLocation?.selected?.label || payload?.toLocation?.label || ''
+  ).trim();
+  const normalizedToLocation = normalizeLocationName(toLabel);
+  const query =
+    normalizedFromLocation
+      ? { normalizedFromLocation, durationDays, budget }
+      : { fromLatitudeRounded, fromLongitudeRounded, durationDays, budget };
+
+  await ItineraryCache.findOneAndUpdate(
+    query,
+    {
+      fromLocation: fromLabel,
+      normalizedFromLocation,
+      toLocation: toLabel,
+      normalizedToLocation,
+      fromLatitudeRounded,
+      fromLongitudeRounded,
+      durationDays,
+      budget,
+      itineraryData,
+    },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
 // ─── Main export ─────────────────────────────────────────────────────────────
 
 export async function generateItineraryPlan(payload) {
+  const cachedItinerary = await findCachedItinerary(payload);
+  if (cachedItinerary) {
+    return {
+      ...cachedItinerary,
+      cacheMeta: { itinerary: 'hit' },
+    };
+  }
+  await assertCanGenerateNewItinerary();
+
   const fromInput = await resolveLocationInput(payload.fromLocation, 'from');
   const areaName = await reverseGeocodeWithGoogle(fromInput.latitude, fromInput.longitude);
   const userEnteredFromLabel =
@@ -876,7 +1162,7 @@ export async function generateItineraryPlan(payload) {
     days.find((day) => day.stops?.[0]?.imageUrl)?.stops?.[0]?.imageUrl ||
     '';
 
-  return {
+  const itinerary = {
     title: canonicalFromLabel,
     coverImageUrl,
     createdAtIso: new Date().toISOString(),
@@ -895,4 +1181,7 @@ export async function generateItineraryPlan(payload) {
     stats: { totalStops, totalDistanceKm },
     days,
   };
+
+  await saveItineraryToCache(payload, itinerary);
+  return itinerary;
 }

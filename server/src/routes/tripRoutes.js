@@ -13,10 +13,11 @@ import {
   updateTripStatus,
 } from '../controllers/tripController.js';
 import { requireAuth } from '../middleware/authMiddleware.js';
+import { itineraryGenerateLimiter } from '../middleware/securityMiddleware.js';
 
 const router = Router();
 
-router.post('/generate', requireAuth, generateTripDraft);
+router.post('/generate', requireAuth, itineraryGenerateLimiter, generateTripDraft);
 router.post('/', requireAuth, createTrip);
 router.get('/explore', requireAuth, listExploreTrips);
 router.get('/saved', requireAuth, listSavedTrips);
