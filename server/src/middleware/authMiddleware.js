@@ -1,5 +1,6 @@
 import { verifyAuthToken } from '../utils/jwt.js';
 import User from '../models/User.js';
+import { touchUserActivity } from '../services/engagementService.js';
 
 export function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -13,6 +14,7 @@ export function requireAuth(req, res, next) {
   try {
     const decoded = verifyAuthToken(token);
     req.auth = { userId: decoded.sub };
+    touchUserActivity(decoded.sub).catch(() => {});
     return next();
   } catch (_error) {
     return res.status(401).json({ message: 'Invalid or expired token.' });

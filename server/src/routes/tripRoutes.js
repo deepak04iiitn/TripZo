@@ -5,6 +5,7 @@ import {
   generateTripDraft,
   getTripById,
   listExploreTrips,
+  listLatestTrips,
   listSavedTrips,
   listTrips,
   removeSavedTripForUser,
@@ -20,6 +21,7 @@ const router = Router();
 router.post('/generate', requireAuth, itineraryGenerateLimiter, generateTripDraft);
 router.post('/', requireAuth, createTrip);
 router.get('/explore', requireAuth, listExploreTrips);
+router.get('/latest', requireAuth, listLatestTrips);
 router.get('/saved', requireAuth, listSavedTrips);
 router.get('/', requireAuth, listTrips);
 router.post('/:tripId/save', requireAuth, saveTripForUser);

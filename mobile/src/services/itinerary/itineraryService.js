@@ -8,6 +8,7 @@ import {
   deleteTripApi,
   generateTripDraftApi,
   listExploreTripsApi,
+  listLatestTripsApi,
   listSavedTripsApi,
   listTripsApi,
   removeSavedTripForUserApi,
@@ -652,6 +653,22 @@ export async function listExploreTrips(filters = {}) {
         owner: trip.owner || { id: '', username: 'traveler', fullName: 'Traveler', profileImageUrl: '' },
       }))
       .filter((trip) => !trip.isSaved);
+  }
+}
+
+export async function listLatestTrips(limit = 40) {
+  const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(120, Math.floor(Number(limit)))) : 40;
+  try {
+    return await listLatestTripsApi({ limit: safeLimit });
+  } catch (_error) {
+    const allTrips = await listTrips();
+    return [...allTrips]
+      .sort((a, b) => {
+        const aTime = new Date(a.createdAt || a.createdAtIso || a.updatedAt || a.startDate || 0).getTime();
+        const bTime = new Date(b.createdAt || b.createdAtIso || b.updatedAt || b.startDate || 0).getTime();
+        return bTime - aTime;
+      })
+      .slice(0, safeLimit);
   }
 }
 

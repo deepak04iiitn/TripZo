@@ -188,6 +188,23 @@ export async function listExploreTrips(req, res, next) {
   }
 }
 
+export async function listLatestTrips(req, res, next) {
+  try {
+    const limitQuery = Number(req.query?.limit);
+    const limit = Number.isFinite(limitQuery) ? Math.max(1, Math.min(Math.floor(limitQuery), 120)) : 40;
+
+    const trips = await Trip.find({})
+      .sort({ createdAt: -1 })
+      .limit(limit);
+
+    return res.json({
+      trips: trips.map(publicTrip),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function listSavedTrips(req, res, next) {
   try {
     const savedRows = await SavedTrip.find({ userId: req.auth.userId })

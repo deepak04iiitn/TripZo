@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
 // import * as Google from 'expo-auth-session/providers/google';
 // import * as WebBrowser from 'expo-web-browser';
 // import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
@@ -8,7 +8,14 @@ import OnboardingScreen from './screens/OnboardingScreen';
 import LoginScreen from './screens/LoginScreen';
 import RegisterScreen from './screens/RegisterScreen';
 import MainTabNavigator from './src/navigation/MainTabNavigator';
-import { deleteAccount as requestDeleteAccount, getMe, signin, signup } from './src/services/auth/authService';
+import {
+  deleteAccount as requestDeleteAccount,
+  endUserSession,
+  getMe,
+  signin,
+  signup,
+  startUserSession,
+} from './src/services/auth/authService';
 import {
   clearSession,
   isOnboardingDone,
@@ -33,6 +40,11 @@ const SCREEN = {
 export default function App() {
   const [screen, setScreen] = useState(SCREEN.LOADING);
   const [user, setUser] = useState(null);
+  const activeSessionRef = useRef({
+    sessionId: null,
+    startedAt: null,
+  });
+  const appStateRef = useRef(AppState.currentState);
   // const [googleRequest, _googleResponse, promptGoogleSignIn] = Google.useAuthRequest({
   //   expoClientId: process.env.EXPO_PUBLIC_GOOGLE_EXPO_CLIENT_ID,
   //   androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
@@ -147,6 +159,73 @@ export default function App() {
     await requestDeleteAccount();
     await handleLogout();
   };
+
+  useEffect(() => {
+    if (screen !== SCREEN.MAIN || !user?.id) {
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    const startSession = async () => {
+      if (activeSessionRef.current.sessionId) {
+        return;
+      }
+
+      try {
+        const response = await startUserSession();
+        if (!isMounted) {
+          return;
+        }
+        activeSessionRef.current = {
+          sessionId: response.sessionId,
+          startedAt: Date.now(),
+        };
+      } catch (_error) {
+        // Session tracking should never block app usage.
+      }
+    };
+
+    const endSession = async () => {
+      const activeSession = activeSessionRef.current;
+      if (!activeSession.sessionId) {
+        return;
+      }
+
+      activeSessionRef.current = { sessionId: null, startedAt: null };
+
+      const elapsedSeconds = activeSession.startedAt
+        ? Math.max(0, Math.floor((Date.now() - activeSession.startedAt) / 1000))
+        : undefined;
+
+      try {
+        await endUserSession(activeSession.sessionId, elapsedSeconds);
+      } catch (_error) {
+        // Ignore cleanup errors and continue app flow.
+      }
+    };
+
+    startSession();
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const previousState = appStateRef.current;
+      appStateRef.current = nextState;
+
+      if (previousState === 'active' && /inactive|background/.test(nextState)) {
+        endSession();
+      }
+
+      if (/inactive|background/.test(previousState) && nextState === 'active') {
+        startSession();
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.remove();
+      endSession();
+    };
+  }, [screen, user?.id]);
 
   if (screen === SCREEN.LOADING) {
     return (

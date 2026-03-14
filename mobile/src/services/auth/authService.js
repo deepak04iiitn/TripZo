@@ -100,3 +100,35 @@ export async function resetPasswordWithSecurityAnswer(payload) {
   }
 }
 
+export async function startUserSession() {
+  try {
+    const response = await apiClient.post('/api/auth/session/start');
+    return response.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to start user session.'));
+  }
+}
+
+export async function endUserSession(sessionId, durationSeconds) {
+  try {
+    const response = await apiClient.post('/api/auth/session/end', {
+      sessionId,
+      durationSeconds,
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to end user session.'));
+  }
+}
+
+export async function getAdminDashboardMetrics(rangeDays = 30) {
+  try {
+    const response = await apiClient.get('/api/auth/admin/metrics', {
+      params: { rangeDays },
+    });
+    return response.data;
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Unable to load admin dashboard metrics.'));
+  }
+}
+

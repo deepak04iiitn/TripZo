@@ -69,6 +69,11 @@ const userSchema = new mongoose.Schema(
       select: false,
       default: '',
     },
+    lastActiveAt: {
+      type: Date,
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,

@@ -67,6 +67,15 @@ export async function listExploreTripsApi(params = {}) {
   }
 }
 
+export async function listLatestTripsApi(params = {}) {
+  try {
+    const response = await apiClient.get('/api/trips/latest', { params });
+    return response.data?.trips || [];
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to load latest itineraries.'));
+  }
+}
+
 export async function listSavedTripsApi() {
   try {
     const response = await apiClient.get('/api/trips/saved');

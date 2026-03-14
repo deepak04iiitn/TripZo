@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import UserSession from '../models/UserSession.js';
 import { signAuthToken } from '../utils/jwt.js';
 import { getFirebaseAdminAuth } from '../config/firebaseAdmin.js';
 import {
@@ -11,6 +12,7 @@ import {
 } from '../utils/validators.js';
 import fs from 'fs/promises';
 import path from 'path';
+import { touchUserActivity } from '../services/engagementService.js';
 
 function generateUsernameFromEmail(email) {
   const localPart = (email.split('@')[0] || 'traveler')
@@ -98,6 +100,7 @@ export async function signup(req, res, next) {
       authProvider: 'local',
       role: resolveRoleForEmail(value.email),
     });
+    await touchUserActivity(user._id);
     const token = signAuthToken(user._id.toString());
 
     return res.status(201).json({
@@ -141,6 +144,7 @@ export async function signin(req, res, next) {
     }
 
     const token = signAuthToken(user._id.toString());
+    await touchUserActivity(user._id);
 
     return res.json({
       message: 'Signin successful.',
@@ -211,6 +215,7 @@ export async function googleAuth(req, res, next) {
     }
 
     const token = signAuthToken(user._id.toString());
+    await touchUserActivity(user._id);
 
     return res.json({
       message: 'Google authentication successful.',
@@ -243,6 +248,68 @@ export async function logout(_req, res) {
   return res.json({
     message: 'Logged out successfully on client. Remove stored token to end session.',
   });
+}
+
+export async function startSession(req, res, next) {
+  try {
+    const session = await UserSession.create({
+      userId: req.auth.userId,
+      startedAt: new Date(),
+      isActive: true,
+    });
+
+    return res.status(201).json({
+      message: 'Session started.',
+      sessionId: session._id.toString(),
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+function resolveSessionDurationSeconds(sessionDoc, providedDuration) {
+  if (Number.isFinite(providedDuration) && providedDuration >= 0) {
+    return Math.floor(providedDuration);
+  }
+
+  const startedAtMs = new Date(sessionDoc.startedAt).getTime();
+  const nowMs = Date.now();
+  const diffSeconds = Math.max(0, Math.floor((nowMs - startedAtMs) / 1000));
+  return diffSeconds;
+}
+
+export async function endSession(req, res, next) {
+  try {
+    const sessionId = typeof req.body?.sessionId === 'string' ? req.body.sessionId : '';
+    const providedDuration = Number(req.body?.durationSeconds);
+
+    const query = {
+      userId: req.auth.userId,
+      isActive: true,
+    };
+
+    if (sessionId) {
+      query._id = sessionId;
+    }
+
+    const session = await UserSession.findOne(query).sort({ startedAt: -1 });
+    if (!session) {
+      return res.status(404).json({ message: 'Active session not found.' });
+    }
+
+    session.endedAt = new Date();
+    session.isActive = false;
+    session.durationSeconds = resolveSessionDurationSeconds(session, providedDuration);
+    await session.save();
+
+    return res.json({
+      message: 'Session ended.',
+      sessionId: session._id.toString(),
+      durationSeconds: session.durationSeconds,
+    });
+  } catch (error) {
+    return next(error);
+  }
 }
 
 export async function updateProfile(req, res, next) {

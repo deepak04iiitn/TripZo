@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   Image,
   Modal,
   Pressable,
@@ -21,48 +22,32 @@ import ScreenTopBar from '../../navigation/components/ScreenTopBar';
 import { getMe, updateProfile } from '../../services/auth/authService';
 import { requestLiveLocation } from '../../services/maps/locationService';
 import { searchPhotonPlaces, getPlaceCoords, reverseGeocodeWithPhoton } from '../../services/maps/googleGeocodingService';
-import { generateSmartItinerary, listTrips, saveTrip } from '../../services/itinerary/itineraryService';
+import { generateSmartItinerary, listLatestTrips, listTrips, saveTrip } from '../../services/itinerary/itineraryService';
 
-const POPULAR_DESTINATIONS = [
+const TRIP_PLANNING_ESSENTIALS = [
   {
-    id: 'bali',
-    title: 'Bali, Indonesia',
-    rating: '4.9 (2.1k reviews)',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuB98Oo94eERTc9kET7aLEsiUHHHtD7tC6C_tv3p6RFNBuHzxzh0UfDIaqdx-JVbiovzcfCMJLTuBe2LitoE0t66EoaA27viMLtE34nwH_fACNI9t7z06D1rlo9j55H4oKfzNC0kj5fF-2adclr0UJFtPqLSuJZxlGM06LWhi7-VRYNTNSut-tUOVkL3X7F4OYZ3W_tC3ktJXCykEwhthp1IaJWtp7YxoOkXAP7oJjewIfpCgSnaa_7Yv-1wmg54MIUmswW95jvIQgKW',
-    liked: true,
+    id: 'smart-route',
+    title: 'Smart Route Flow',
+    description: 'Stops sequenced to reduce backtracking and save travel time.',
+    icon: 'git-network-outline',
+    accent: '#0EA5E9',
+    badge: 'Efficiency',
   },
   {
-    id: 'kyoto',
-    title: 'Kyoto, Japan',
-    rating: '4.8 (1.5k reviews)',
-    image:
-      'https://lh3.googleusercontent.com/aida-public/AB6AXuDba27gnA7Q3fV5pmsqTe73igsqv3QpihDjlqAwuRlPhO_pgAZL_R83iyvk980iHNPeHIdgekw1AoldSfRPyPHiYvUXsrua3IZ_gC5qeY5QWNqH53j4lYdypsqcVw2bZcSTbqIWecArS4abzzKOK0xL8Ipnwyi3DsgJRIakjsgEn923d3xiJKsAe37CWLZsdzGXMZOW6O6LYip-QCBhvVNYY35n5LGwJkOvESk3352Q0AVM1WSU2TNBukX53fW_MILjQ0q47QEABp8W',
-    liked: false,
-  },
-];
-
-const TRENDING_EXPERIENCES = [
-  {
-    id: 'sunset-cruise',
-    title: 'Sunset Cruise',
-    place: 'Lisbon',
-    image:
-      'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+    id: 'balanced-days',
+    title: 'Balanced Day Split',
+    description: 'Auto-balances your day plan for better pace and coverage.',
+    icon: 'calendar-clear-outline',
+    accent: '#8B5CF6',
+    badge: 'Scheduling',
   },
   {
-    id: 'street-food',
-    title: 'Street Food Walk',
-    place: 'Bangkok',
-    image:
-      'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?auto=format&fit=crop&w=1200&q=80',
-  },
-  {
-    id: 'mountain-trail',
-    title: 'Mountain Trail',
-    place: 'Interlaken',
-    image:
-      'https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1200&q=80',
+    id: 'budget-aware',
+    title: 'Budget-Aware Picks',
+    description: 'Suggestions align with your selected budget tier and schedule.',
+    icon: 'wallet-outline',
+    accent: '#10B981',
+    badge: 'Cost',
   },
 ];
 
@@ -70,11 +55,40 @@ const TRAVEL_CHECKLIST = [
   { id: 'passport', label: 'Passport and IDs ready', icon: 'card-outline' },
   { id: 'bookings', label: 'Hotel confirmation saved', icon: 'bed-outline' },
   { id: 'essentials', label: 'Essentials packing list', icon: 'cube-outline' },
+  { id: 'payments', label: 'Cards, cash and UPI backup set', icon: 'wallet-outline' },
+  { id: 'maps', label: 'Offline maps and key addresses saved', icon: 'map-outline' },
+  { id: 'emergency', label: 'Emergency contacts and documents backed up', icon: 'shield-checkmark-outline' },
+];
+
+const SMART_TIPS = [
+  {
+    id: 'fare-window',
+    icon: 'airplane-outline',
+    title: 'Smart Tip',
+    text: 'Flights booked on Tue/Wed can often be 8-14% cheaper for short-haul routes.',
+  },
+  {
+    id: 'early-checkin',
+    icon: 'time-outline',
+    title: 'Smart Tip',
+    text: 'Start your first stop before 10 AM to avoid crowds and gain an extra sightseeing slot.',
+  },
+  {
+    id: 'cluster-stops',
+    icon: 'git-network-outline',
+    title: 'Smart Tip',
+    text: 'Group nearby places on the same day to reduce transit fatigue and save commute time.',
+  },
+  {
+    id: 'offline-ready',
+    icon: 'download-outline',
+    title: 'Smart Tip',
+    text: 'Save key addresses and transport notes offline in case your mobile data drops mid-trip.',
+  },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECENT_TRIPS_LIMIT = 3;
-const COMMUNITY_FAVORITES_FALLBACK = ['Goa Beaches', 'Rishikesh Camps', 'Coorg Escapes', 'Jaipur Walks'];
 const BUDGET_OPTIONS = [
   { key: '$', label: 'Low' },
   { key: '$$', label: 'Medium' },
@@ -315,11 +329,15 @@ export default function HomeScreen({ styles }) {
   const [securityPromptError, setSecurityPromptError] = useState('');
   const [isSecurityPromptSaving, setIsSecurityPromptSaving] = useState(false);
   const [recentTrips, setRecentTrips] = useState([]);
-  const [communityFavorites, setCommunityFavorites] = useState(COMMUNITY_FAVORITES_FALLBACK);
   const [isLoadingRecentTrips, setIsLoadingRecentTrips] = useState(false);
+  const [latestItineraries, setLatestItineraries] = useState([]);
+  const [isLoadingLatestItineraries, setIsLoadingLatestItineraries] = useState(false);
+  const [smartTipIndex, setSmartTipIndex] = useState(0);
   const fromLocationRef = useRef('');
   const fromSelectedPlaceRef = useRef(null);
   const fromEditedManuallyRef = useRef(false);
+  const smartTipAnim = useRef(new Animated.Value(1)).current;
+  const smartTipAnimatingRef = useRef(false);
 
   useEffect(() => {
     fromLocationRef.current = fromLocation;
@@ -397,6 +415,40 @@ export default function HomeScreen({ styles }) {
   );
 
   useEffect(() => {
+    if (SMART_TIPS.length <= 1) {
+      return undefined;
+    }
+
+    const rotateTip = () => {
+      if (smartTipAnimatingRef.current) {
+        return;
+      }
+
+      smartTipAnimatingRef.current = true;
+      Animated.timing(smartTipAnim, {
+        toValue: 0,
+        duration: 220,
+        useNativeDriver: true,
+      }).start(() => {
+        setSmartTipIndex((prev) => (prev + 1) % SMART_TIPS.length);
+        smartTipAnim.setValue(0);
+        Animated.timing(smartTipAnim, {
+          toValue: 1,
+          duration: 260,
+          useNativeDriver: true,
+        }).start(() => {
+          smartTipAnimatingRef.current = false;
+        });
+      });
+    };
+
+    const interval = setInterval(rotateTip, 3600);
+    return () => clearInterval(interval);
+  }, [smartTipAnim]);
+
+  const currentSmartTip = SMART_TIPS[smartTipIndex] || SMART_TIPS[0];
+
+  useEffect(() => {
     if (!fromLocation.trim()) {
       setFromSuggestions([]);
       return undefined;
@@ -416,22 +468,27 @@ export default function HomeScreen({ styles }) {
 
   const loadRecentTrips = useCallback(async () => {
     setIsLoadingRecentTrips(true);
+    setIsLoadingLatestItineraries(true);
     try {
-      const trips = await listTrips();
+      const [tripsResult, latestResult] = await Promise.allSettled([listTrips(), listLatestTrips(80)]);
+      const trips = tripsResult.status === 'fulfilled' ? tripsResult.value : [];
+
       setRecentTrips(trips.slice(0, RECENT_TRIPS_LIMIT));
-      const likedTrips = [...trips]
-        .filter((trip) => Number(trip.likesCount || 0) > 0 || trip.isLiked)
-        .sort((a, b) => Number(b.likesCount || 0) - Number(a.likesCount || 0));
-      if (likedTrips.length >= 4) {
-        setCommunityFavorites(likedTrips.slice(0, 4).map((trip) => trip.title));
-      } else {
-        setCommunityFavorites(COMMUNITY_FAVORITES_FALLBACK);
-      }
+
+      const latestFromAllTrips = latestResult.status === 'fulfilled' ? latestResult.value : [];
+      const latestSource = latestFromAllTrips.length ? latestFromAllTrips : trips;
+      const latestSorted = [...latestSource].sort((a, b) => {
+        const aTime = new Date(a.createdAt || a.createdAtIso || a.updatedAt || a.startDate || 0).getTime();
+        const bTime = new Date(b.createdAt || b.createdAtIso || b.updatedAt || b.startDate || 0).getTime();
+        return bTime - aTime;
+      });
+      setLatestItineraries(latestSorted.slice(0, 8));
     } catch (_error) {
       setRecentTrips([]);
-      setCommunityFavorites(COMMUNITY_FAVORITES_FALLBACK);
+      setLatestItineraries([]);
     } finally {
       setIsLoadingRecentTrips(false);
+      setIsLoadingLatestItineraries(false);
     }
   }, []);
 
@@ -705,16 +762,28 @@ export default function HomeScreen({ styles }) {
         <View style={styles.screenBody}>
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.homeScrollContent}>
             <View style={styles.homeHero}>
-              <Text style={styles.homeHeroTitle}>Where to next?</Text>
-              <Text style={styles.homeHeroSubtitle}>Plan your dream getaway in seconds.</Text>
+              <View style={styles.homeHeroHeaderRow}>
+                <View style={styles.homeHeroBadge}>
+                  <Ionicons name="map-outline" size={12} color="#0F2044" />
+                  <Text style={styles.homeHeroBadgeText}>Smart Planner</Text>
+                </View>
+              </View>
+              <Text style={styles.homeHeroTitle}>Plan Smarter, Travel Better</Text>
+              <Text style={styles.homeHeroSubtitle}>
+                Build optimized itineraries in seconds with live location and budget-aware routing.
+              </Text>
               <View style={styles.heroStatRow}>
                 <View style={styles.heroStatChip}>
-                  <Ionicons name="time-outline" size={14} color="#FF6B6B" />
-                  <Text style={styles.heroStatText}>Avg plan time: 10 sec</Text>
+                  <Ionicons name="time-outline" size={13} color="#0EA5E9" />
+                  <Text style={styles.heroStatText} numberOfLines={1} ellipsizeMode="tail">
+                    Avg plan time: 10 sec
+                  </Text>
                 </View>
                 <View style={styles.heroStatChip}>
-                  <Ionicons name="flash-outline" size={14} color="#FF6B6B" />
-                  <Text style={styles.heroStatText}>Instant itinerary</Text>
+                  <Ionicons name="git-network-outline" size={13} color="#8B5CF6" />
+                  <Text style={styles.heroStatText} numberOfLines={1} ellipsizeMode="tail">
+                    Optimized routes
+                  </Text>
                 </View>
               </View>
             </View>
@@ -810,55 +879,30 @@ export default function HomeScreen({ styles }) {
               </View>
             </View>
 
+            <View style={localStyles.essentialsSection}>
             <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>Popular Destinations</Text>
-              <TouchableOpacity activeOpacity={0.8}>
-                <Text style={styles.sectionAction}>See all</Text>
-              </TouchableOpacity>
+                <Text style={styles.sectionTitle}>Trip Planning Essentials</Text>
             </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.horizontalList}>
-              {POPULAR_DESTINATIONS.map((destination) => (
-                <View key={destination.id} style={styles.destinationCard}>
-                  <View style={styles.destinationImageWrap}>
-                    <Image source={{ uri: destination.image }} style={styles.destinationImage} resizeMode="cover" />
-                    <View style={styles.favoritePill}>
-                      <Ionicons
-                        name={destination.liked ? 'heart' : 'heart-outline'}
-                        size={14}
-                        color={destination.liked ? '#FF6B6B' : '#94A3B8'}
-                      />
+              <Text style={styles.essentialsSubtitle}>
+                Every trip uses smart route logic, balanced day pacing, and budget-aware suggestions.
+              </Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.essentialsCarouselRow}>
+                {TRIP_PLANNING_ESSENTIALS.map((item) => (
+                  <View key={item.id} style={styles.essentialSlideCard}>
+                    <View style={styles.essentialSlideHeader}>
+                      <View style={[styles.essentialSlideIconWrap, { backgroundColor: `${item.accent}1A` }]}>
+                        <Ionicons name={item.icon} size={18} color={item.accent} />
                     </View>
+                      <Text style={styles.essentialSlideTitle}>{item.title}</Text>
                   </View>
-                  <View style={styles.destinationBody}>
-                    <Text style={styles.destinationTitle}>{destination.title}</Text>
-                    <View style={styles.ratingRow}>
-                      <Ionicons name="star" size={13} color="#94A3B8" />
-                      <Text style={styles.ratingText}>{destination.rating}</Text>
-                    </View>
+                    <Text style={styles.essentialSlideDescription}>{item.description}</Text>
+                    <View style={styles.essentialSlideFooter}>
+                      <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                      <Text style={styles.essentialSlideFooterText}>Always included</Text>
                   </View>
                 </View>
               ))}
             </ScrollView>
-
-            <View style={styles.communityCard}>
-              <View style={styles.communityHead}>
-                <View style={styles.communityIconWrap}>
-                  <Ionicons name="people-outline" size={18} color="#0EA5E9" />
-                </View>
-                <View style={styles.communityHeadText}>
-                  <Text style={styles.communityTitle}>Community Favorites This Week</Text>
-                  <Text style={styles.communitySubtitle}>Most saved destinations by TripZo travelers</Text>
-                </View>
-              </View>
-
-              <View style={styles.communityTagsRow}>
-                {communityFavorites.map((tag) => (
-                  <TouchableOpacity key={tag} activeOpacity={0.9} style={styles.communityTagChip}>
-                    <Text style={styles.communityTagText}>{tag}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
             </View>
 
             <View style={styles.recentTripsSection}>
@@ -900,51 +944,94 @@ export default function HomeScreen({ styles }) {
                 </View>
               )}
 
-              <View style={styles.smartTipCard}>
+              <Animated.View
+                style={[
+                  styles.smartTipCard,
+                  {
+                    opacity: smartTipAnim,
+                    transform: [
+                      {
+                        translateY: smartTipAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [8, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
                 <View style={styles.smartTipIcon}>
-                  <Ionicons name="bulb-outline" size={16} color="#FF8E53" />
+                  <Ionicons name={currentSmartTip.icon} size={16} color="#FF8E53" />
                 </View>
                 <View style={styles.smartTipBody}>
-                  <Text style={styles.smartTipTitle}>Smart Tip</Text>
-                  <Text style={styles.smartTipText}>
-                    Booking flights on Tue/Wed can reduce fares by 8-14% for most short-haul trips.
-                  </Text>
+                  <Text style={styles.smartTipTitle}>{currentSmartTip.title}</Text>
+                  <Text style={styles.smartTipText}>{currentSmartTip.text}</Text>
+                  <View style={styles.smartTipDotsRow}>
+                    {SMART_TIPS.map((tip, index) => (
+                      <View
+                        key={tip.id}
+                        style={[styles.smartTipDot, index === smartTipIndex && styles.smartTipDotActive]}
+                      />
+                    ))}
+                  </View>
                 </View>
-              </View>
+              </Animated.View>
             </View>
 
             <View style={styles.sectionHead}>
               <Text style={styles.sectionTitle}>Trending Experiences</Text>
-              <TouchableOpacity activeOpacity={0.8}>
+              <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.navigate('Explore')}>
                 <Text style={styles.sectionAction}>Explore</Text>
               </TouchableOpacity>
             </View>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.experiencesRow}>
-              {TRENDING_EXPERIENCES.map((experience) => (
-                <TouchableOpacity key={experience.id} activeOpacity={0.92} style={styles.experienceCard}>
-                  <Image source={{ uri: experience.image }} style={styles.experienceImage} resizeMode="cover" />
+              {isLoadingLatestItineraries ? (
+                <View style={localStyles.trendingStateCard}>
+                  <ActivityIndicator size="small" color="#FF6B6B" />
+                  <Text style={localStyles.trendingStateText}>Loading latest itineraries...</Text>
+                </View>
+              ) : latestItineraries.length ? (
+                latestItineraries.map((trip) => (
+                  <TouchableOpacity key={trip.id} activeOpacity={0.92} style={styles.experienceCard}>
+                    <Image
+                      source={{
+                        uri:
+                          trip.coverImageUrl ||
+                          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
+                      }}
+                      style={styles.experienceImage}
+                      resizeMode="cover"
+                    />
                   <LinearGradient
                     colors={['transparent', 'rgba(15,32,68,0.85)']}
                     start={{ x: 0.5, y: 0.1 }}
                     end={{ x: 0.5, y: 1 }}
                     style={styles.experienceOverlay}
                   >
-                    <Text style={styles.experienceTitle}>{experience.title}</Text>
+                      <Text style={styles.experienceTitle} numberOfLines={2}>
+                        {trip.from?.label || trip.title || 'Unknown place'}
+                      </Text>
                     <View style={styles.experienceMeta}>
-                      <Ionicons name="location-outline" size={13} color="#E2E8F0" />
-                      <Text style={styles.experiencePlace}>{experience.place}</Text>
+                        <Ionicons name="time-outline" size={13} color="#E2E8F0" />
+                        <Text style={styles.experiencePlace}>{formatTripDurationDays(trip)}</Text>
                     </View>
                   </LinearGradient>
                 </TouchableOpacity>
-              ))}
+                ))
+              ) : (
+                <View style={localStyles.trendingStateCard}>
+                  <Ionicons name="map-outline" size={16} color="#94A3B8" />
+                  <Text style={localStyles.trendingStateText}>No itineraries yet. Create one to see it here.</Text>
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.checklistCard}>
               <View style={styles.checklistHeader}>
                 <Text style={styles.checklistTitle}>Pre-trip Checklist</Text>
                 <View style={styles.checklistBadge}>
-                  <Text style={styles.checklistBadgeText}>3 tasks</Text>
+                  <Text style={styles.checklistBadgeText}>{TRAVEL_CHECKLIST.length} tasks</Text>
                 </View>
               </View>
               {TRAVEL_CHECKLIST.map((item, index) => (
@@ -967,7 +1054,18 @@ export default function HomeScreen({ styles }) {
   );
 }
 
+function formatTripDurationDays(trip) {
+  const durationDays = Number(trip?.durationDays || trip?.days?.length || 1);
+  if (!Number.isFinite(durationDays) || durationDays <= 1) {
+    return '1 day';
+  }
+  return `${durationDays} days`;
+}
+
 const localStyles = StyleSheet.create({
+  essentialsSection: {
+    marginTop: 14,
+  },
   suggestionCard: {
     marginTop: 8,
     borderRadius: 12,
@@ -1015,6 +1113,24 @@ const localStyles = StyleSheet.create({
     color: '#64748B',
     fontSize: 12,
     fontWeight: '600',
+  },
+  trendingStateCard: {
+    width: 230,
+    height: 160,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  trendingStateText: {
+    color: '#64748B',
+    fontSize: 12,
+    fontWeight: '600',
+    textAlign: 'center',
   },
   dateInputText: {
     height: '100%',

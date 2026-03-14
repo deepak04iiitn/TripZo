@@ -214,6 +214,16 @@ export default function TripsScreen({ styles }) {
   };
 
   const activeTrips = useMemo(() => tripBuckets[activeTab] || [], [activeTab, tripBuckets]);
+  const tabCounts = useMemo(
+    () => ({
+      all: tripBuckets.all?.length || 0,
+      saved: tripBuckets.saved?.length || 0,
+      ongoing: tripBuckets.ongoing?.length || 0,
+      upcoming: tripBuckets.upcoming?.length || 0,
+      completed: tripBuckets.completed?.length || 0,
+    }),
+    [tripBuckets]
+  );
 
   if (selectedTrip) {
     return (
@@ -389,6 +399,7 @@ export default function TripsScreen({ styles }) {
             >
               {TRIP_TABS.map((tab) => {
                 const selected = activeTab === tab.key;
+                const count = tabCounts[tab.key] ?? 0;
                 return (
                   <TouchableOpacity
                     key={tab.key}
@@ -396,9 +407,18 @@ export default function TripsScreen({ styles }) {
                     onPress={() => setActiveTab(tab.key)}
                     style={[screenStyles.segmentItem, selected && screenStyles.segmentItemActive]}
                   >
-                    <Text numberOfLines={1} style={[screenStyles.segmentText, selected && screenStyles.segmentTextActive]}>
-                      {tab.label}
-                    </Text>
+                    <View style={screenStyles.segmentInner}>
+                      <Text numberOfLines={1} style={[screenStyles.segmentText, selected && screenStyles.segmentTextActive]}>
+                        {tab.label}
+                      </Text>
+                      {count > 0 && (
+                        <View style={[screenStyles.segmentCountPill, selected && screenStyles.segmentCountPillActive]}>
+                          <Text style={[screenStyles.segmentCountText, selected && screenStyles.segmentCountTextActive]}>
+                            {count}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </TouchableOpacity>
                 );
               })}
@@ -491,7 +511,7 @@ export default function TripsScreen({ styles }) {
               <View style={screenStyles.emptyCard}>
                 <Ionicons name="briefcase-outline" size={20} color="#94A3B8" />
                 <Text style={screenStyles.emptyTitle}>
-                  {activeTab === 'saved' ? 'No saved itineraries yet' : 'No trips in this tab yet'}
+                  {activeTab === 'saved' ? 'No saved itineraries yet' : 'No trips in your bucket yet'}
                 </Text>
                 <Text style={screenStyles.emptySub}>
                   {activeTab === 'saved'
@@ -548,6 +568,11 @@ const screenStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  segmentInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+  },
   segmentItemActive: {
     backgroundColor: '#FFFFFF',
     shadowColor: '#0F172A',
@@ -563,6 +588,28 @@ const screenStyles = StyleSheet.create({
     flexShrink: 0,
   },
   segmentTextActive: {
+    color: '#FF6B6B',
+  },
+  segmentCountPill: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: 'rgba(100,116,139,0.18)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 5,
+    marginTop: -5,
+  },
+  segmentCountPillActive: {
+    backgroundColor: 'rgba(255,107,107,0.16)',
+  },
+  segmentCountText: {
+    color: '#475569',
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 12,
+  },
+  segmentCountTextActive: {
     color: '#FF6B6B',
   },
   listContentContainer: {
