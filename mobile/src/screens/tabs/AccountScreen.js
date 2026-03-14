@@ -217,7 +217,6 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                     <Ionicons name="person-outline" size={18} color="#FF6B6B" />
                   </View>
                   <View style={styles.accountRowBody}>
-                    <Text style={styles.accountRowLabel}>Full Name</Text>
                     <TextInput
                       value={fullName}
                       onChangeText={setFullName}
@@ -251,7 +250,7 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                     <Text style={styles.accountRowLabel}>Password</Text>
                     <Text style={styles.accountRowValue}>••••••••••••</Text>
                   </View>
-                  <Text style={styles.changeHintText}>Use Forgot Password</Text>
+                  
                 </View>
 
                 <View style={styles.accountRow}>
@@ -290,14 +289,14 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
                   <>
-                    <Ionicons name="save-outline" size={18} color="#FFFFFF" />
+                    <Ionicons name="save-outline" size={16} color="#FFFFFF" />
                     <Text style={styles.accountSaveText}>Save Profile</Text>
                   </>
                 )}
               </TouchableOpacity>
 
               <TouchableOpacity activeOpacity={0.9} style={styles.accountLogoutBtn} onPress={onLogout}>
-                <Ionicons name="log-out-outline" size={18} color="#FFFFFF" />
+                <Ionicons name="log-out-outline" size={16} color="#FFFFFF" />
                 <Text style={styles.accountLogoutText}>Logout Account</Text>
               </TouchableOpacity>
 
@@ -307,7 +306,7 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                 onPress={confirmDeleteAccount}
                 disabled={isDeleting}
               >
-                <Ionicons name="trash-outline" size={18} color="#FF6B6B" />
+                <Ionicons name="trash-outline" size={16} color="#FF6B6B" />
                 <Text style={styles.accountDeleteText}>{isDeleting ? 'Deleting...' : 'Delete Account'}</Text>
               </TouchableOpacity>
             </View>
@@ -317,5 +316,6 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
     </SafeAreaView>
   );
 }
+
 
 

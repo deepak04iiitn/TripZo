@@ -15,10 +15,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenTopBar from '../../navigation/components/ScreenTopBar';
-import { categorizeTrips, deleteTrip, listTrips, updateTripLike } from '../../services/itinerary/itineraryService';
+import {
+  categorizeTrips,
+  deleteTrip,
+  listSavedTrips,
+  listTrips,
+  removeSavedTripForUser,
+  updateTripLike,
+} from '../../services/itinerary/itineraryService';
 
 const TRIP_TABS = [
   { key: 'all', label: 'All' },
+  { key: 'saved', label: 'Saved' },
   { key: 'ongoing', label: 'Ongoing' },
   { key: 'upcoming', label: 'Upcoming' },
   { key: 'completed', label: 'Done' },
@@ -106,13 +114,16 @@ function recommendationMeta(type) {
 export default function TripsScreen({ styles }) {
   const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('all');
-  const [tripBuckets, setTripBuckets] = useState({ all: [], ongoing: [], upcoming: [], completed: [] });
+  const [tripBuckets, setTripBuckets] = useState({ all: [], saved: [], ongoing: [], upcoming: [], completed: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
 
   const loadTrips = useCallback(async () => {
-    const trips = await listTrips();
-    setTripBuckets(categorizeTrips(trips));
+    const [trips, savedTrips] = await Promise.all([listTrips(), listSavedTrips()]);
+    setTripBuckets({
+      ...categorizeTrips(trips),
+      saved: savedTrips,
+    });
   }, []);
 
   useFocusEffect(
@@ -138,6 +149,7 @@ export default function TripsScreen({ styles }) {
       const replaceIn = (items = []) => items.map((trip) => (trip.id === updatedTrip.id ? { ...trip, ...updatedTrip } : trip));
       return {
         all: replaceIn(prev.all),
+        saved: replaceIn(prev.saved),
         ongoing: replaceIn(prev.ongoing),
         upcoming: replaceIn(prev.upcoming),
         completed: replaceIn(prev.completed),
@@ -172,6 +184,25 @@ export default function TripsScreen({ styles }) {
       applyTripUpdate(updated);
     } else {
       applyTripUpdate({ id: trip.id, isLiked: nextLike, likesCount: nextLike ? 1 : 0 });
+    }
+  };
+
+  const removeSavedTrip = async (trip) => {
+    await removeSavedTripForUser(trip.id);
+    setTripBuckets((prev) => {
+      const clearSavedFlag = (items = []) =>
+        items.map((item) => (item.id === trip.id ? { ...item, isSaved: false } : item));
+      return {
+        ...prev,
+        saved: prev.saved.filter((item) => item.id !== trip.id),
+        all: clearSavedFlag(prev.all),
+        ongoing: clearSavedFlag(prev.ongoing),
+        upcoming: clearSavedFlag(prev.upcoming),
+        completed: clearSavedFlag(prev.completed),
+      };
+    });
+    if (selectedTrip?.id === trip.id) {
+      setSelectedTrip((prev) => (prev ? { ...prev, isSaved: false } : prev));
     }
   };
 
@@ -350,22 +381,29 @@ export default function TripsScreen({ styles }) {
         <ScreenTopBar activeRoute="Trips" styles={styles} />
         <View style={styles.screenBody}>
           <View style={screenStyles.tabsStickyWrap}>
-            <View style={screenStyles.segmentedWrap}>
-                  {TRIP_TABS.map((tab) => {
-                    const selected = activeTab === tab.key;
-                    return (
-                      <TouchableOpacity
-                        key={tab.key}
-                        activeOpacity={0.9}
-                        onPress={() => setActiveTab(tab.key)}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={screenStyles.segmentedWrap}
+              keyboardShouldPersistTaps="handled"
+            >
+              {TRIP_TABS.map((tab) => {
+                const selected = activeTab === tab.key;
+                return (
+                  <TouchableOpacity
+                    key={tab.key}
+                    activeOpacity={0.9}
+                    onPress={() => setActiveTab(tab.key)}
                     style={[screenStyles.segmentItem, selected && screenStyles.segmentItemActive]}
-                      >
-                    <Text style={[screenStyles.segmentText, selected && screenStyles.segmentTextActive]}>{tab.label}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                        </View>
-                      </View>
+                  >
+                    <Text numberOfLines={1} style={[screenStyles.segmentText, selected && screenStyles.segmentTextActive]}>
+                      {tab.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
 
           <ScrollView
             showsVerticalScrollIndicator={false}
@@ -384,9 +422,9 @@ export default function TripsScreen({ styles }) {
                       <TouchableOpacity
                         activeOpacity={0.9}
                         style={screenStyles.deleteTripBtn}
-                        onPress={() => confirmDeleteTrip(trip)}
+                        onPress={() => (activeTab === 'saved' ? removeSavedTrip(trip) : confirmDeleteTrip(trip))}
                       >
-                        <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+                        <Ionicons name={activeTab === 'saved' ? 'bookmark' : 'trash-outline'} size={15} color="#FFFFFF" />
                       </TouchableOpacity>
                       <View style={screenStyles.statusBadgeWrap}>
                         <View style={[screenStyles.statusBadge, { backgroundColor: meta.bg }]}> 
@@ -452,8 +490,14 @@ export default function TripsScreen({ styles }) {
             {!activeTrips.length && (
               <View style={screenStyles.emptyCard}>
                 <Ionicons name="briefcase-outline" size={20} color="#94A3B8" />
-                <Text style={screenStyles.emptyTitle}>No trips in this tab yet</Text>
-                <Text style={screenStyles.emptySub}>Plan a new trip from Home and it will appear here.</Text>
+                <Text style={screenStyles.emptyTitle}>
+                  {activeTab === 'saved' ? 'No saved itineraries yet' : 'No trips in this tab yet'}
+                </Text>
+                <Text style={screenStyles.emptySub}>
+                  {activeTab === 'saved'
+                    ? 'Swipe right on Explore itineraries and they will appear here.'
+                    : 'Plan a new trip from Home and it will appear here.'}
+                </Text>
                           </View>
             )}
           </ScrollView>
@@ -489,7 +533,7 @@ const screenStyles = StyleSheet.create({
     marginBottom: 10,
   },
   segmentedWrap: {
-    height: 48,
+    minHeight: 48,
     borderRadius: 13,
     backgroundColor: 'rgba(148,163,184,0.2)',
     padding: 6,
@@ -498,9 +542,9 @@ const screenStyles = StyleSheet.create({
     gap: 4,
   },
   segmentItem: {
-    flex: 1,
-    height: '100%',
+    height: 36,
     borderRadius: 10,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -516,6 +560,7 @@ const screenStyles = StyleSheet.create({
     color: '#64748B',
     fontSize: 13,
     fontWeight: '700',
+    flexShrink: 0,
   },
   segmentTextActive: {
     color: '#FF6B6B',

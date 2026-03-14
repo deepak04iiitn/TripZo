@@ -7,12 +7,17 @@ import {
   createTripApi,
   deleteTripApi,
   generateTripDraftApi,
+  listExploreTripsApi,
+  listSavedTripsApi,
   listTripsApi,
+  removeSavedTripForUserApi,
+  saveTripForUserApi,
   updateTripLikeApi,
   updateTripStatusApi,
 } from './itineraryApiService';
 
 const TRIPS_STORAGE_KEY = 'tripzo.trips.v1';
+const SAVED_TRIP_IDS_STORAGE_KEY = 'tripzo.savedTrips.v1';
 
 const BUDGET_RANGES = {
   $: { min: 0, max: 1, label: 'Low' },
@@ -558,6 +563,128 @@ export async function updateTripLike(tripId, like) {
     );
     await AsyncStorage.setItem(TRIPS_STORAGE_KEY, JSON.stringify(nextTrips));
     return nextTrips.find((trip) => trip.id === tripId) || null;
+  }
+}
+
+function normalizeExploreFilters(filters = {}) {
+  const params = {};
+  if (filters.search?.trim()) {
+    params.search = filters.search.trim();
+  }
+  if (['$', '$$', '$$$'].includes(filters.budget)) {
+    params.budget = filters.budget;
+  }
+  if (['newest', 'popular', 'durationAsc', 'durationDesc'].includes(filters.sort)) {
+    params.sort = filters.sort;
+  }
+
+  const parseDurationBoundary = (value) => {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === 'string' && !value.trim()) {
+      return null;
+    }
+
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return null;
+    }
+    return Math.max(1, Math.floor(parsed));
+  };
+
+  const durationMin = parseDurationBoundary(filters.durationMin);
+  const durationMax = parseDurationBoundary(filters.durationMax);
+
+  if (durationMin !== null) {
+    params.durationMin = durationMin;
+  }
+  if (durationMax !== null) {
+    params.durationMax = durationMax;
+  }
+  return params;
+}
+
+async function loadSavedTripIdsLocal() {
+  const raw = await AsyncStorage.getItem(SAVED_TRIP_IDS_STORAGE_KEY);
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveSavedTripIdsLocal(ids) {
+  await AsyncStorage.setItem(SAVED_TRIP_IDS_STORAGE_KEY, JSON.stringify(ids));
+}
+
+export async function listExploreTrips(filters = {}) {
+  const params = normalizeExploreFilters(filters);
+  try {
+    const trips = await listExploreTripsApi(params);
+    return trips.filter((trip) => trip?.status === 'completed' && !trip?.isSaved);
+  } catch (_error) {
+    const allTrips = await listTrips();
+    const savedIds = new Set(await loadSavedTripIdsLocal());
+    const search = String(params.search || '').toLowerCase();
+    return allTrips
+      .filter((trip) => {
+        if (buildTripSections(trip) !== 'completed') {
+          return false;
+        }
+        if (search) {
+          const title = String(trip.title || '').toLowerCase();
+          const place = String(trip.from?.label || '').toLowerCase();
+          if (!title.includes(search) && !place.includes(search)) {
+            return false;
+          }
+        }
+        if (params.budget && trip.budget !== params.budget) {
+          return false;
+        }
+        if (params.durationMin && Number(trip.durationDays) < Number(params.durationMin)) {
+          return false;
+        }
+        if (params.durationMax && Number(trip.durationDays) > Number(params.durationMax)) {
+          return false;
+        }
+        return true;
+      })
+      .map((trip) => ({
+        ...trip,
+        isSaved: savedIds.has(trip.id),
+        owner: trip.owner || { id: '', username: 'traveler', fullName: 'Traveler', profileImageUrl: '' },
+      }))
+      .filter((trip) => !trip.isSaved);
+  }
+}
+
+export async function listSavedTrips() {
+  try {
+    return await listSavedTripsApi();
+  } catch (_error) {
+    const allTrips = await listTrips();
+    const savedIds = new Set(await loadSavedTripIdsLocal());
+    return allTrips.filter((trip) => savedIds.has(trip.id)).map((trip) => ({ ...trip, isSaved: true }));
+  }
+}
+
+export async function saveTripForUser(tripId) {
+  try {
+    return await saveTripForUserApi(tripId);
+  } catch (_error) {
+    const ids = await loadSavedTripIdsLocal();
+    const next = Array.from(new Set([...ids, tripId]));
+    await saveSavedTripIdsLocal(next);
+    return null;
+  }
+}
+
+export async function removeSavedTripForUser(tripId) {
+  try {
+    await removeSavedTripForUserApi(tripId);
+    return true;
+  } catch (_error) {
+    const ids = await loadSavedTripIdsLocal();
+    const next = ids.filter((id) => id !== tripId);
+    await saveSavedTripIdsLocal(next);
+    return true;
   }
 }
 

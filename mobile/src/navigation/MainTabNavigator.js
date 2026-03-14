@@ -3,11 +3,11 @@ import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { AnimatedTabIcon, FloatingMapTabButton } from './components/TabBarComponents';
-import PlaceholderTabScreen from '../screens/tabs/PlaceholderTabScreen';
 import HomeScreen from '../screens/tabs/HomeScreen';
 import TripsScreen from '../screens/tabs/TripsScreen';
 import AccountScreen from '../screens/tabs/AccountScreen';
 import MapScreen from '../screens/tabs/MapScreen';
+import ExploreScreen from '../screens/tabs/ExploreScreen';
 
 const Tab = createBottomTabNavigator();
  
@@ -37,14 +37,7 @@ export default function MainTabNavigator({ user, onLogout, onDeleteAccount }) {
         />
         <Tab.Screen
           name="Explore"
-          children={() => (
-            <PlaceholderTabScreen
-              title="Explore"
-              subtitle="Discover places, food, and experiences near you."
-              accent="#F59E0B"
-              styles={styles}
-            />
-          )}
+          children={() => <ExploreScreen styles={styles} />}
         />
         <Tab.Screen name="Account">
           {() => <AccountScreen user={user} onLogout={onLogout} onDeleteAccount={onDeleteAccount} styles={styles} />}
@@ -825,56 +818,56 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   accountActions: {
-    marginTop: 18,
-    gap: 12,
+    marginTop: 14,
+    gap: 10,
   },
   accountSaveBtn: {
-    height: 56,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: '#FF6B6B',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   accountSaveText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   accountLogoutBtn: {
-    height: 56,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 12,
     backgroundColor: '#0F172A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     shadowColor: '#0F172A',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.2,
-    shadowRadius: 14,
-    elevation: 5,
+    shadowOffset: { width: 0, height: 7 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    elevation: 3,
   },
   accountLogoutText: {
     color: '#FFFFFF',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   accountDeleteBtn: {
-    height: 56,
-    borderRadius: 14,
+    height: 48,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: 'rgba(255,107,107,0.22)',
     backgroundColor: '#FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   accountDeleteText: {
     color: '#FF6B6B',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   accountDeleteDisabled: {

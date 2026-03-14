@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import ScreenTopBar from '../../navigation/components/ScreenTopBar';
-import { listTrips } from '../../services/itinerary/itineraryService';
+import { listSavedTrips, listTrips } from '../../services/itinerary/itineraryService';
 import { getOsrmRoute } from '../../services/maps/googleRoutingService';
 
 const INITIAL_REGION = {
@@ -270,13 +270,16 @@ export default function MapScreen({ styles }) {
   });
 
   const loadTrips = useCallback(async () => {
-    const allTrips = await listTrips();
-    setTrips(allTrips);
+    const [ownedTrips, savedTrips] = await Promise.all([listTrips(), listSavedTrips()]);
+    const mergedTrips = [...ownedTrips, ...savedTrips].filter(
+      (trip, index, source) => source.findIndex((item) => item.id === trip.id) === index
+    );
+    setTrips(mergedTrips);
     setSelectedTripId((currentSelected) => {
-      if (!allTrips.length) {
+      if (!mergedTrips.length) {
         return null;
       }
-      if (currentSelected && allTrips.some((item) => item.id === currentSelected)) {
+      if (currentSelected && mergedTrips.some((item) => item.id === currentSelected)) {
         return currentSelected;
       }
       return null;
