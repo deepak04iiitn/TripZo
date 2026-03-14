@@ -13,6 +13,7 @@ import {
 import fs from 'fs/promises';
 import path from 'path';
 import { touchUserActivity } from '../services/engagementService.js';
+import { resolveStoredUploadAbsolutePath } from '../utils/uploadPaths.js';
 
 function generateUsernameFromEmail(email) {
   const localPart = (email.split('@')[0] || 'traveler')
@@ -367,7 +368,7 @@ export async function uploadProfileImage(req, res, next) {
     }
 
     if (user.profileImagePath) {
-      const absolutePath = path.resolve(process.cwd(), user.profileImagePath);
+      const absolutePath = resolveStoredUploadAbsolutePath(user.profileImagePath);
       await deleteFileIfExists(absolutePath);
     }
 
@@ -393,7 +394,7 @@ export async function deleteAccount(req, res, next) {
     }
 
     if (user.profileImagePath) {
-      const absolutePath = path.resolve(process.cwd(), user.profileImagePath);
+      const absolutePath = resolveStoredUploadAbsolutePath(user.profileImagePath);
       await deleteFileIfExists(absolutePath);
     }
 

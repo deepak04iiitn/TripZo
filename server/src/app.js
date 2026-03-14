@@ -1,9 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import path from 'path';
 import authRoutes from './routes/authRoutes.js';
 import tripRoutes from './routes/tripRoutes.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { getUploadsStaticDir } from './utils/uploadPaths.js';
 import {
   burstRateLimiter,
   globalRateLimiter,
@@ -18,7 +18,7 @@ app.use(cors());
 app.use(express.json({ limit: process.env.REQUEST_BODY_LIMIT || '200kb' }));
 app.use(globalRateLimiter);
 app.use(burstRateLimiter);
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+app.use('/uploads', express.static(getUploadsStaticDir()));
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true, service: 'tripzo-server' });
