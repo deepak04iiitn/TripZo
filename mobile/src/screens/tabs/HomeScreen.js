@@ -789,8 +789,15 @@ export default function HomeScreen({ styles }) {
             </View>
 
             <View style={styles.itineraryCard}>
+              <LinearGradient
+                colors={['#FF6B6B', '#FF8E53', '#FFC947']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.itineraryTopStrip}
+              />
               <View style={styles.itineraryHeader}>
                 <View>
+                  <Text style={styles.itineraryEyebrow}>TripZo Planner</Text>
                   <Text style={styles.itineraryTitle}>Build your itinerary</Text>
                   <Text style={styles.itinerarySubtitle}>Personalized by preferences and budget</Text>
                 </View>
@@ -798,6 +805,7 @@ export default function HomeScreen({ styles }) {
                   <Ionicons name="compass-outline" size={14} color="#FF6B6B" />
                 </View>
               </View>
+              
 
               <View style={styles.inputBlock}>
                 <Text style={styles.inputLabel}>From</Text>
@@ -875,7 +883,7 @@ export default function HomeScreen({ styles }) {
 
               <View style={styles.planTrustRow}>
                 <Ionicons name="shield-checkmark-outline" size={14} color="#0EA5E9" />
-                <Text style={styles.planTrustText}>Trusted by travelers worldwide</Text>
+                <Text style={styles.planTrustText}>Trusted planner - route, time and budget aware</Text>
               </View>
             </View>
 

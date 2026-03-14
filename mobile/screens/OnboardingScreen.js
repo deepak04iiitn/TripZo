@@ -34,7 +34,7 @@ const slides = [
     titleLight: 'EXPLORE MORE,',
     titleBold:  'WASTE LESS TIME.',
     description:
-      "Stop wasting hours on back-and-forth routes. TripZo auto-builds optimized itineraries around your location, time, and interests — cutting transit by up to 40% so you see far more of what matters.",
+      "Stop wasting hours on back-and-forth routes. TripZo auto-builds optimized itineraries around your location, time, and interests - cutting transit by up to 40% so you see far more of what matters.",
   },
   {
     id: '2',
@@ -42,7 +42,7 @@ const slides = [
     titleLight: 'YOUR PERFECT TRIP,',
     titleBold:  'FULLY AUTOMATED.',
     description:
-      "Multi-day plans, restaurant slots, nearby ATMs, live trip progress, real traveller tips, and one-tap sharing — every tool a modern traveller needs, beautifully unified in one app.",
+    "TripZo plans every journey using our 3-pillar RTC framework - Route Optimized, Time Optimized, and Cost Optimized - so you travel smarter, faster, and within your budget.",
   },
 ];
 
