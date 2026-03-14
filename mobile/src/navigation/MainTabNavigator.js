@@ -7,6 +7,7 @@ import PlaceholderTabScreen from '../screens/tabs/PlaceholderTabScreen';
 import HomeScreen from '../screens/tabs/HomeScreen';
 import TripsScreen from '../screens/tabs/TripsScreen';
 import AccountScreen from '../screens/tabs/AccountScreen';
+import MapScreen from '../screens/tabs/MapScreen';
 
 const Tab = createBottomTabNavigator();
  
@@ -32,14 +33,7 @@ export default function MainTabNavigator({ user, onLogout, onDeleteAccount }) {
         <Tab.Screen name="Trips" children={() => <TripsScreen styles={styles} />} />
         <Tab.Screen
           name="Map"
-          children={() => (
-            <PlaceholderTabScreen
-              title="Map"
-              subtitle="Live map, nearby places, and routes will appear here."
-              accent="#22C55E"
-              styles={styles}
-            />
-          )}
+          children={() => <MapScreen styles={styles} />}
         />
         <Tab.Screen
           name="Explore"

@@ -10,7 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -104,6 +104,7 @@ function recommendationMeta(type) {
 }
 
 export default function TripsScreen({ styles }) {
+  const navigation = useNavigation();
   const [activeTab, setActiveTab] = useState('all');
   const [tripBuckets, setTripBuckets] = useState({ all: [], ongoing: [], upcoming: [], completed: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -172,6 +173,13 @@ export default function TripsScreen({ styles }) {
     } else {
       applyTripUpdate({ id: trip.id, isLiked: nextLike, likesCount: nextLike ? 1 : 0 });
     }
+  };
+
+  const openTripOnMap = (trip) => {
+    if (!trip?.id) {
+      return;
+    }
+    navigation.navigate('Map', { tripId: trip.id });
   };
 
   const activeTrips = useMemo(() => tripBuckets[activeTab] || [], [activeTab, tripBuckets]);
@@ -398,9 +406,20 @@ export default function TripsScreen({ styles }) {
                           <Text style={screenStyles.tripDateText}>{formatDateShort(trip.startDate)} - {formatDateShort(trip.endDate)}</Text>
                     </View>
                   </View>
-                      <View style={status === 'ongoing' ? screenStyles.mapCircleActive : screenStyles.mapCircleIdle}>
-                        <Ionicons name={status === 'completed' ? 'checkmark-circle' : 'map-outline'} size={18} color={status === 'ongoing' ? '#FFFFFF' : '#94A3B8'} />
-                </View>
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={() => openTripOnMap(trip)}
+                        style={status === 'ongoing' ? screenStyles.mapCircleActive : screenStyles.mapCircleIdle}
+                      >
+                        <Ionicons
+                          name={status === 'completed' ? 'checkmark-circle' : 'map-outline'}
+                          size={14}
+                          color={status === 'ongoing' ? '#FFFFFF' : '#475569'}
+                        />
+                        <Text style={status === 'ongoing' ? screenStyles.mapActionTextActive : screenStyles.mapActionTextIdle}>
+                          Open in Map
+                        </Text>
+                      </TouchableOpacity>
                     </View>
 
                     <View style={screenStyles.cardBottomRow}>
@@ -595,20 +614,36 @@ const screenStyles = StyleSheet.create({
     fontWeight: '600',
   },
   mapCircleActive: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    minWidth: 108,
+    height: 36,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FF6B6B',
   },
   mapCircleIdle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    minWidth: 108,
+    height: 36,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    gap: 5,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#EEF2F7',
+  },
+  mapActionTextActive: {
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  mapActionTextIdle: {
+    color: '#334155',
+    fontSize: 11,
+    fontWeight: '800',
   },
   cardBottomRow: {
     marginTop: 12,

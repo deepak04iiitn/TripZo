@@ -5,6 +5,7 @@
 const GOOGLE_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 const NEARBY_SEARCH_URL = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json';
 const PLACE_PHOTO_URL = 'https://maps.googleapis.com/maps/api/place/photo';
+const MAX_ATTRACTION_QUERY_VARIANTS = 10;
 
 // Maps to track categories from Google Place types
 const GOOGLE_TYPE_TO_CATEGORY = {
@@ -27,8 +28,6 @@ const EXCLUDED_PLACE_TYPES = new Set([
   'lawyer',
   'car_rental',
   'lodging',
-  'store',
-  'shopping_mall',
   'hospital',
   'doctor',
   'school',
@@ -62,10 +61,35 @@ const PUBLIC_ATTRACTION_TYPES = new Set([
   'hindu_temple',
   'mosque',
   'synagogue',
-  'city_hall',
+  'place_of_worship',
+  'shopping_mall',
   'stadium',
   'amusement_park',
+  'rv_park',
+  'city_hall',
 ]);
+
+const EXPANDED_ATTRACTION_QUERIES = [
+  { type: 'tourist_attraction' },
+  { type: 'museum' },
+  { type: 'art_gallery' },
+  { type: 'park' },
+  { type: 'zoo' },
+  { type: 'amusement_park' },
+  { type: 'aquarium' },
+  { type: 'hindu_temple' },
+  { type: 'church' },
+  { type: 'mosque' },
+  { type: 'synagogue' },
+  { keyword: 'fort palace castle monument heritage' },
+  { keyword: 'old town heritage district archaeological ruins' },
+  { keyword: 'viewpoint hill sunset sunrise skyline observation tower' },
+  { keyword: 'river walk lake promenade ghat waterfront' },
+  { keyword: 'famous market shopping district handicraft antique night market' },
+  { keyword: 'famous street boulevard city square clock tower landmark bridge' },
+  { keyword: 'theme park water park adventure park entertainment complex' },
+  { keyword: 'science center planetarium exhibition hall cultural center' },
+];
 
 // ─── Core fetch ──────────────────────────────────────────────────────────────
 
@@ -90,10 +114,60 @@ async function googleNearbySearch({ latitude, longitude, radiusMeters, type, key
   return data.results || [];
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function googleNearbySearchAllPages({ latitude, longitude, radiusMeters, type, keyword, maxPages = 1 }) {
+  const allResults = [];
+  let nextPageToken = null;
+  let page = 0;
+
+  do {
+    let url =
+      `${NEARBY_SEARCH_URL}` +
+      `?location=${latitude},${longitude}` +
+      `&radius=${radiusMeters}` +
+      `&key=${GOOGLE_KEY}`;
+
+    if (nextPageToken) {
+      await sleep(1800);
+      url = `${NEARBY_SEARCH_URL}?pagetoken=${encodeURIComponent(nextPageToken)}&key=${GOOGLE_KEY}`;
+    } else {
+      if (type) url += `&type=${encodeURIComponent(type)}`;
+      if (keyword) url += `&keyword=${encodeURIComponent(keyword)}`;
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      break;
+    }
+    const data = await response.json();
+    if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS' && data.status !== 'INVALID_REQUEST') {
+      break;
+    }
+
+    allResults.push(...(data.results || []));
+    nextPageToken = data.next_page_token || null;
+    page += 1;
+  } while (nextPageToken && page < maxPages);
+
+  return allResults;
+}
+
 // ─── Normalise a Google place to the shared shape ────────────────────────────
 
 function normalizeGooglePlace(place) {
+  const lowerName = String(place.name || '').toLowerCase();
+  const hasViewpointSignal =
+    place.types?.includes('natural_feature') ||
+    lowerName.includes('viewpoint') ||
+    lowerName.includes('sunset') ||
+    lowerName.includes('sunrise') ||
+    lowerName.includes('lookout') ||
+    lowerName.includes('observation');
   const category =
+    (hasViewpointSignal ? 'viewpoint' : null) ||
     place.types?.reduce((found, t) => found || GOOGLE_TYPE_TO_CATEGORY[t], null) ||
     'attraction';
 
@@ -128,7 +202,41 @@ function isLikelyPublicAttraction(place) {
     return false;
   }
 
-  return types.some((type) => PUBLIC_ATTRACTION_TYPES.has(type));
+  const keywordBoost = [
+    'fort',
+    'palace',
+    'castle',
+    'museum',
+    'monument',
+    'heritage',
+    'ruins',
+    'viewpoint',
+    'garden',
+    'park',
+    'temple',
+    'church',
+    'mosque',
+    'shrine',
+    'market',
+    'bazaar',
+    'ghat',
+    'lake',
+    'waterfall',
+    'square',
+    'bridge',
+    'clock tower',
+    'planetarium',
+    'science center',
+    'gallery',
+    'aquarium',
+    'amusement',
+    'theme park',
+  ];
+
+  return (
+    types.some((type) => PUBLIC_ATTRACTION_TYPES.has(type)) ||
+    keywordBoost.some((keyword) => lowerName.includes(keyword))
+  );
 }
 
 function attractionPopularityScore(place) {
@@ -143,25 +251,28 @@ function attractionPopularityScore(place) {
  * Fetches real tourist attractions, museums, parks, etc. near a location.
  * Queries tourist_attraction and museum types, deduplicates by place_id.
  */
-export async function getNearbyAttractions({ latitude, longitude, radiusMeters = 7000, limit = 12 }) {
-  const [touristResult, museumResult, parkResult] = await Promise.allSettled([
-    googleNearbySearch({ latitude, longitude, radiusMeters, type: 'tourist_attraction' }),
-    googleNearbySearch({ latitude, longitude, radiusMeters, type: 'museum' }),
-    googleNearbySearch({ latitude, longitude, radiusMeters, type: 'park' }),
-  ]);
+export async function getNearbyAttractions({ latitude, longitude, radiusMeters = 7000, limit = 240 }) {
+  const queryResults = await Promise.allSettled(
+    EXPANDED_ATTRACTION_QUERIES.slice(0, MAX_ATTRACTION_QUERY_VARIANTS).map((query) =>
+      googleNearbySearchAllPages({
+        latitude,
+        longitude,
+        radiusMeters,
+        type: query.type,
+        keyword: query.keyword,
+        maxPages: 1,
+      })
+    )
+  );
 
-  const combined = [
-    ...(touristResult.status === 'fulfilled' ? touristResult.value : []),
-    ...(museumResult.status === 'fulfilled' ? museumResult.value : []),
-    ...(parkResult.status === 'fulfilled' ? parkResult.value : []),
-  ];
+  const combined = queryResults.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
 
   // Deduplicate by place_id and require a name
   const seen = new Set();
   const deduped = combined.filter((p) => p.name && !seen.has(p.place_id) && seen.add(p.place_id));
   const strictPublic = deduped
     .filter((place) => isLikelyPublicAttraction(place))
-    .filter((place) => Number(place.user_ratings_total || 0) >= 50 && Number(place.rating || 0) >= 4.0)
+    .filter((place) => Number(place.user_ratings_total || 0) >= 20 && Number(place.rating || 0) >= 3.8)
     .sort((a, b) => attractionPopularityScore(b) - attractionPopularityScore(a));
 
   if (strictPublic.length >= Math.min(4, limit)) {

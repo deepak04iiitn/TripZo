@@ -27,6 +27,19 @@ const CATEGORY_VISIT_MINUTES = {
   default: 50,
 };
 const MAX_ATTRACTION_RADIUS_METERS = 50000;
+const MAX_ATTRACTIONS_TO_FETCH = 120;
+const MAX_STOPS_PER_DAY = 7;
+const MAX_RECOMMENDATION_ENRICHED_STOPS = 36;
+const AMENITY_LOOKUP_TIMEOUT_MS = 3500;
+const RESTAURANT_STOP_INTERVAL = 3;
+const RESTAURANT_MIN_GAP_STOPS = 3;
+const ATM_STOP_INTERVAL = 5;
+const ATM_MIN_GAP_STOPS = 4;
+const WASHROOM_STOP_INTERVAL = 3;
+const WASHROOM_MIN_GAP_STOPS = 2;
+const MAX_RESTAURANT_RECOMMENDATIONS_PER_DAY = 3;
+const MAX_ATM_RECOMMENDATIONS_PER_DAY = 1;
+const MAX_WASHROOM_RECOMMENDATIONS_PER_DAY = 1;
 
 function parseDateOnly(value) {
   const [year, month, day] = String(value || '').split('-').map((part) => Number(part));
@@ -45,16 +58,6 @@ function getDaysInclusive(startDate, endDate) {
   const end = parseDateOnly(endDate);
   const diffDays = Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   return Math.max(1, diffDays);
-}
-
-function clampStopsByDuration(days) {
-  if (days <= 1) {
-    return 5;
-  }
-  if (days === 2) {
-    return 8;
-  }
-  return 10;
 }
 
 function normalizeAttractionCategory(tags) {
@@ -426,13 +429,16 @@ async function resolveLocationInput(input, role) {
 
 async function fetchSmartRecommendation(amenity, stop, radiusMeters, fallbackLabel) {
   try {
-    const candidates = await getNearbyAmenities({
-      amenity,
-      latitude: stop.latitude,
-      longitude: stop.longitude,
-      radiusMeters,
-      limit: 3,
-    });
+    const candidates = await Promise.race([
+      getNearbyAmenities({
+        amenity,
+        latitude: stop.latitude,
+        longitude: stop.longitude,
+        radiusMeters,
+        limit: 3,
+      }),
+      new Promise((resolve) => setTimeout(() => resolve([]), AMENITY_LOOKUP_TIMEOUT_MS)),
+    ]);
 
     if (candidates[0]) {
       return candidates[0];
@@ -589,8 +595,7 @@ export async function generateSmartItinerary(payload) {
   const startDate = payload.startDate || toIsoDate(new Date());
   const endDate = payload.endDate || startDate;
   const durationDays = getDaysInclusive(startDate, endDate);
-  const maxStops = clampStopsByDuration(durationDays);
-
+  const maxTotalStopsForTrip = Math.max(1, durationDays * MAX_STOPS_PER_DAY);
   // Fetch real attractions using max supported nearby radius before using fallback.
   let attractions = [];
   try {
@@ -598,7 +603,7 @@ export async function generateSmartItinerary(payload) {
       latitude: center.latitude,
       longitude: center.longitude,
       radiusMeters: MAX_ATTRACTION_RADIUS_METERS,
-      limit: maxStops,
+      limit: Math.min(MAX_ATTRACTIONS_TO_FETCH, maxTotalStopsForTrip),
     });
     attractions = nearby.map((item) => ({
       ...item,
@@ -609,18 +614,22 @@ export async function generateSmartItinerary(payload) {
   }
 
   if (!attractions.length) {
-    attractions = fallbackAttractions(center, maxStops);
+    attractions = fallbackAttractions(center, Math.min(24, maxTotalStopsForTrip));
   }
 
   const routeNodes = [{ id: 'origin', label: from.label, latitude: from.latitude, longitude: from.longitude }, ...attractions];
   const matrix = await getDistanceMatrix(routeNodes);
   const nearestPath = nearestNeighborOrder(matrix.durations);
   const optimizedPath = twoOptImprove(nearestPath, matrix.durations);
-  const orderedAttractions = optimizedPath.slice(1).map((nodeIndex) => routeNodes[nodeIndex]);
+  const orderedAttractions = optimizedPath
+    .slice(1)
+    .map((nodeIndex) => routeNodes[nodeIndex])
+    .slice(0, maxTotalStopsForTrip);
 
-  const standardDailyTravelMinutes = 8 * 60;
-  const dayTimeLimits = buildDayTimeLimits(startDate, durationDays, standardDailyTravelMinutes);
-  const targetStopsPerDay = buildBalancedStopTargets(orderedAttractions.length, dayTimeLimits);
+  const targetStopsPerDay = buildBalancedStopTargets(
+    orderedAttractions.length,
+    Array.from({ length: durationDays }, () => 1)
+  );
 
   const days = [];
   let currentDayIndex = 0;
@@ -628,6 +637,12 @@ export async function generateSmartItinerary(payload) {
   let dayStops = [];
   let dayTravelMeters = 0;
   let previousNodeIndex = 0;
+  let lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
+  let lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
+  let lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+  let restaurantsRecommendedToday = 0;
+  let atmsRecommendedToday = 0;
+  let washroomsRecommendedToday = 0;
   const finalizeCurrentDay = () => {
     const dayDate = new Date(parseDateOnly(startDate).getTime() + currentDayIndex * 24 * 60 * 60 * 1000);
     days.push({
@@ -642,6 +657,12 @@ export async function generateSmartItinerary(payload) {
     dayTravelMeters = 0;
     dayStops = [];
     previousNodeIndex = 0;
+    lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
+    lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
+    lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+    restaurantsRecommendedToday = 0;
+    atmsRecommendedToday = 0;
+    washroomsRecommendedToday = 0;
   };
 
   for (let stopIndex = 0; stopIndex < orderedAttractions.length; stopIndex += 1) {
@@ -654,24 +675,33 @@ export async function generateSmartItinerary(payload) {
     const travelMinutes = Math.round((matrix.durations[previousNodeIndex][matrixNodeIndex] || 0) / 60);
     const travelDistanceMeters = Math.round(matrix.distances[previousNodeIndex][matrixNodeIndex] || 0);
     const visitMinutes = estimateVisitMinutes(stop);
-    const projectedMinutes = dayMinutes + travelMinutes + visitMinutes;
-    const currentDayLimitMinutes = dayTimeLimits[currentDayIndex] || standardDailyTravelMinutes;
-
-    if (projectedMinutes > currentDayLimitMinutes && currentDayIndex < durationDays - 1 && dayStops.length > 0) {
-      finalizeCurrentDay();
-    }
-
     const stopRuntimeMinutes = dayMinutes + travelMinutes + visitMinutes;
     const recommendations = [];
+    const shouldEnrichStop = stopIndex < MAX_RECOMMENDATION_ENRICHED_STOPS;
+    const dayStopPosition = dayStops.length + 1;
+    const restaurantGap = dayStopPosition - lastRestaurantRecommendationAt;
+    const atmGap = dayStopPosition - lastAtmRecommendationAt;
+    const washroomGap = dayStopPosition - lastWashroomRecommendationAt;
 
-    if ((stopIndex + 1) % 3 === 0 || isMealTime(stopRuntimeMinutes)) {
-      const restaurants = await getNearbyAmenities({
-        amenity: 'restaurant',
-        latitude: stop.latitude,
-        longitude: stop.longitude,
-        radiusMeters: 1200,
-        limit: 5,
-      }).catch(() => []);
+    const shouldRecommendMeal =
+      dayStopPosition % RESTAURANT_STOP_INTERVAL === 0 ||
+      (isMealTime(stopRuntimeMinutes) && restaurantGap >= RESTAURANT_MIN_GAP_STOPS);
+    if (
+      shouldEnrichStop &&
+      shouldRecommendMeal &&
+      restaurantGap >= RESTAURANT_MIN_GAP_STOPS &&
+      restaurantsRecommendedToday < MAX_RESTAURANT_RECOMMENDATIONS_PER_DAY
+    ) {
+      const restaurants = await Promise.race([
+        getNearbyAmenities({
+          amenity: 'restaurant',
+          latitude: stop.latitude,
+          longitude: stop.longitude,
+          radiusMeters: 1200,
+          limit: 5,
+        }).catch(() => []),
+        new Promise((resolve) => setTimeout(() => resolve([]), AMENITY_LOOKUP_TIMEOUT_MS)),
+      ]);
       const budgetRange = BUDGET_RANGES[payload.budget] || BUDGET_RANGES.$;
       const filteredByBudget = restaurants.filter((item) => {
         const level = derivePriceLevel(item.tags);
@@ -691,11 +721,21 @@ export async function generateSmartItinerary(payload) {
           reason: 'Meal time or logical sightseeing break',
           place: withFallback,
         });
+        lastRestaurantRecommendationAt = dayStopPosition;
+        restaurantsRecommendedToday += 1;
       }
     }
 
-    const requiresAtm = travelMinutes >= 25 || looksCommercialOrTransit(stop.label) || (stopIndex + 1) % 4 === 0;
-    if (requiresAtm) {
+    const requiresAtm =
+      dayStopPosition % ATM_STOP_INTERVAL === 0 ||
+      travelMinutes >= 40 ||
+      (looksCommercialOrTransit(stop.label) && atmGap >= ATM_MIN_GAP_STOPS);
+    if (
+      shouldEnrichStop &&
+      requiresAtm &&
+      atmGap >= ATM_MIN_GAP_STOPS &&
+      atmsRecommendedToday < MAX_ATM_RECOMMENDATIONS_PER_DAY
+    ) {
       const atm = await fetchSmartRecommendation('atm', stop, 1500, 'ATM');
       if (atm) {
         recommendations.push({
@@ -703,11 +743,21 @@ export async function generateSmartItinerary(payload) {
           reason: 'Commercial corridor or long travel stretch',
           place: atm,
         });
+        lastAtmRecommendationAt = dayStopPosition;
+        atmsRecommendedToday += 1;
       }
     }
 
-    const needsWashroom = (stopIndex + 1) % 2 === 0 || looksCommercialOrTransit(stop.label) || travelMinutes >= 20;
-    if (needsWashroom) {
+    const needsWashroom =
+      dayStopPosition % WASHROOM_STOP_INTERVAL === 0 ||
+      travelMinutes >= 30 ||
+      (looksCommercialOrTransit(stop.label) && washroomGap >= WASHROOM_MIN_GAP_STOPS);
+    if (
+      shouldEnrichStop &&
+      needsWashroom &&
+      washroomGap >= WASHROOM_MIN_GAP_STOPS &&
+      washroomsRecommendedToday < MAX_WASHROOM_RECOMMENDATIONS_PER_DAY
+    ) {
       const washroom = await fetchSmartRecommendation('toilets', stop, 1200, 'Washroom');
       if (washroom) {
         recommendations.push({
@@ -715,6 +765,8 @@ export async function generateSmartItinerary(payload) {
           reason: 'Tourist/transit hotspot or comfort break window',
           place: washroom,
         });
+        lastWashroomRecommendationAt = dayStopPosition;
+        washroomsRecommendedToday += 1;
       }
     }
 
