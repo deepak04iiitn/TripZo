@@ -1171,9 +1171,24 @@ export async function generateItineraryPlan(payload) {
     attractions = fallbackAttractions(center, Math.min(24, maxTotalStopsForTrip));
   }
 
+  // Rank by User Ratings Total (Popularity) -> then Rating Value, to ensure top tourist spots are not missed.
+  attractions.sort((a, b) => {
+    const ratingsCountA = Number(a.tags?.userRatingsTotal || 0);
+    const ratingsCountB = Number(b.tags?.userRatingsTotal || 0);
+    if (ratingsCountA !== ratingsCountB) {
+      return ratingsCountB - ratingsCountA;
+    }
+    const ratingA = Number(a.tags?.rating || 0);
+    const ratingB = Number(b.tags?.rating || 0);
+    return ratingB - ratingA;
+  });
+
+  // Take only the very best candidate attractions to fit the trip length before calculating optimal TSP route.
+  const topAttractions = attractions.slice(0, maxTotalStopsForTrip);
+
   const routeNodes = [
     { id: 'origin', label: from.label, latitude: from.latitude, longitude: from.longitude },
-    ...attractions,
+    ...topAttractions,
   ];
 
   const matrix = await getDistanceMatrix(routeNodes);
@@ -1181,8 +1196,7 @@ export async function generateItineraryPlan(payload) {
   const optimizedPath = twoOptImprove(nearestPath, matrix.durations);
   const orderedAttractions = optimizedPath
     .slice(1)
-    .map((nodeIndex) => routeNodes[nodeIndex])
-    .slice(0, maxTotalStopsForTrip);
+    .map((nodeIndex) => routeNodes[nodeIndex]);
 
   const targetStopsPerDay = buildStopsPerDayTargets(orderedAttractions.length, durationDays);
   const days = [];

@@ -883,14 +883,29 @@ export async function generateSmartItinerary(payload) {
     attractions = fallbackAttractions(center, Math.min(24, maxTotalStopsForTrip));
   }
 
-  const routeNodes = [{ id: 'origin', label: from.label, latitude: from.latitude, longitude: from.longitude }, ...attractions];
+  // Rank by User Ratings Total (Popularity) -> then Rating Value, ensuring top tourist spots aren't missed.
+  attractions.sort((a, b) => {
+    const ratingsCountA = Number(a.tags?.userRatingsTotal || 0);
+    const ratingsCountB = Number(b.tags?.userRatingsTotal || 0);
+    if (ratingsCountA !== ratingsCountB) {
+      return ratingsCountB - ratingsCountA;
+    }
+    const ratingA = Number(a.tags?.rating || 0);
+    const ratingB = Number(b.tags?.rating || 0);
+    return ratingB - ratingA;
+  });
+
+  // Pull only the top highest-quality candidate attractions that will fit into our trip length,
+  // BEFORE trying to optimize the daily path.
+  const topAttractions = attractions.slice(0, maxTotalStopsForTrip);
+
+  const routeNodes = [{ id: 'origin', label: from.label, latitude: from.latitude, longitude: from.longitude }, ...topAttractions];
   const matrix = await getDistanceMatrix(routeNodes);
   const nearestPath = nearestNeighborOrder(matrix.durations);
   const optimizedPath = twoOptImprove(nearestPath, matrix.durations);
   const orderedAttractions = optimizedPath
     .slice(1)
-    .map((nodeIndex) => routeNodes[nodeIndex])
-    .slice(0, maxTotalStopsForTrip);
+    .map((nodeIndex) => routeNodes[nodeIndex]);
 
   const targetStopsPerDay = buildBalancedStopTargets(
     orderedAttractions.length,
