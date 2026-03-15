@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
+  Animated,
   Alert,
   Image,
   ImageBackground,
@@ -23,6 +24,7 @@ import {
   removeSavedTripForUser,
   updateTripLike,
 } from '../../services/itinerary/itineraryService';
+import { SKELETON_GRADIENT_COLORS, useSkeletonShimmer } from '../../utils/skeletonShimmer';
 
 const TRIP_TABS = [
   { key: 'all', label: 'All' },
@@ -101,6 +103,16 @@ function recommendationMeta(type) {
       iconBg: 'rgba(14,165,233,0.16)',
     };
   }
+  if (type === 'medical') {
+    return {
+      icon: 'medkit-outline',
+      label: 'Medical Shop',
+      color: '#16A34A',
+      border: 'rgba(22,163,74,0.3)',
+      bg: 'rgba(22,163,74,0.08)',
+      iconBg: 'rgba(22,163,74,0.16)',
+    };
+  }
   return {
     icon: 'water-outline',
     label: 'Washroom',
@@ -116,15 +128,35 @@ export default function TripsScreen({ styles }) {
   const [activeTab, setActiveTab] = useState('all');
   const [tripBuckets, setTripBuckets] = useState({ all: [], saved: [], ongoing: [], upcoming: [], completed: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingTrips, setIsLoadingTrips] = useState(true);
   const [selectedTrip, setSelectedTrip] = useState(null);
+  const skeletonTranslateX = useSkeletonShimmer();
 
   const loadTrips = useCallback(async () => {
-    const [trips, savedTrips] = await Promise.all([listTrips(), listSavedTrips()]);
-    setTripBuckets({
-      ...categorizeTrips(trips),
-      saved: savedTrips,
-    });
+    setIsLoadingTrips(true);
+    try {
+      const [trips, savedTrips] = await Promise.all([listTrips(), listSavedTrips()]);
+      setTripBuckets({
+        ...categorizeTrips(trips),
+        saved: savedTrips,
+      });
+    } finally {
+      setIsLoadingTrips(false);
+    }
   }, []);
+
+  const SkeletonBlock = ({ style }) => (
+    <View style={[screenStyles.skeletonBase, style]}>
+      <Animated.View style={[screenStyles.skeletonShimmer, { transform: [{ translateX: skeletonTranslateX }] }]}>
+        <LinearGradient
+          colors={SKELETON_GRADIENT_COLORS}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={screenStyles.skeletonShimmerGradient}
+        />
+      </Animated.View>
+    </View>
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -307,7 +339,7 @@ export default function TripsScreen({ styles }) {
                           const stopStart = elapsedBefore + (stop.travelMinutesFromPrevious || 0);
                           const restaurantRecommendation = (stop.recommendations || []).find((r) => r.type === 'restaurant');
                           const utilityRecommendations = (stop.recommendations || []).filter(
-                            (r) => r.type === 'atm' || r.type === 'washroom'
+                            (r) => r.type === 'atm' || r.type === 'washroom' || r.type === 'medical'
                           );
                           const stopImageUrl = getStopImage(stop, selectedTrip);
 
@@ -430,7 +462,25 @@ export default function TripsScreen({ styles }) {
             contentContainerStyle={screenStyles.listContentContainer}
             refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refreshTrips} tintColor="#FF6B6B" />}
           >
-            {activeTrips.map((trip) => {
+            {isLoadingTrips && (
+              <View style={screenStyles.skeletonListWrap}>
+                {[0, 1, 2].map((item) => (
+                  <View key={`trip-skeleton-${item}`} style={screenStyles.tripCard}>
+                    <SkeletonBlock style={screenStyles.skeletonTripImage} />
+                    <View style={screenStyles.skeletonTripBody}>
+                      <SkeletonBlock style={screenStyles.skeletonTripTitle} />
+                      <SkeletonBlock style={screenStyles.skeletonTripMeta} />
+                      <View style={screenStyles.skeletonTripFooter}>
+                        <SkeletonBlock style={screenStyles.skeletonTripChip} />
+                        <SkeletonBlock style={screenStyles.skeletonTripButton} />
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
+
+            {!isLoadingTrips && activeTrips.map((trip) => {
               const meta = statusMeta(trip.status);
               const status = trip.status === 'planned' ? 'upcoming' : trip.status;
               const likesCount = Number(trip.likesCount || 0);
@@ -506,8 +556,7 @@ export default function TripsScreen({ styles }) {
                                 </View>
                               );
                             })}
-
-            {!activeTrips.length && (
+            {!isLoadingTrips && !activeTrips.length && (
               <View style={screenStyles.emptyCard}>
                 <Ionicons name="briefcase-outline" size={20} color="#94A3B8" />
                 <Text style={screenStyles.emptyTitle}>
@@ -615,6 +664,57 @@ const screenStyles = StyleSheet.create({
   listContentContainer: {
     paddingBottom: 120,
     gap: 16,
+  },
+  skeletonListWrap: {
+    gap: 16,
+  },
+  skeletonBase: {
+    overflow: 'hidden',
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+  },
+  skeletonShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 130,
+  },
+  skeletonShimmerGradient: {
+    flex: 1,
+  },
+  skeletonTripImage: {
+    width: '100%',
+    aspectRatio: 16 / 9,
+    borderRadius: 0,
+  },
+  skeletonTripBody: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  skeletonTripTitle: {
+    width: '58%',
+    height: 20,
+    marginBottom: 8,
+  },
+  skeletonTripMeta: {
+    width: '42%',
+    height: 12,
+    marginBottom: 14,
+  },
+  skeletonTripFooter: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  skeletonTripChip: {
+    width: 96,
+    height: 28,
+    borderRadius: 9,
+  },
+  skeletonTripButton: {
+    width: 92,
+    height: 30,
+    borderRadius: 10,
   },
   tripCard: {
     borderRadius: 18,

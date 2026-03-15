@@ -1,6 +1,5 @@
 import React from 'react';
-import { View, Image, Text, TouchableOpacity, StyleSheet, Dimensions } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { View, Image, Text, TouchableOpacity, StyleSheet, Dimensions, StatusBar } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 const Logo = require('../assets/TripZo_Logo.png');
@@ -10,7 +9,11 @@ const { width, height } = Dimensions.get('window');
 export default function SplashScreen({ onDone }) {
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#F3FAF5"
+        translucent={false}
+      />
 
       <View style={styles.imageArea}>
         <Image source={SplashImage} style={styles.heroImage} resizeMode="contain" />

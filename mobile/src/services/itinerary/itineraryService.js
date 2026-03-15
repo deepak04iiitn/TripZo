@@ -10,6 +10,8 @@ import {
   generateTripDraftApi,
   listExploreTripsApi,
   listLatestTripsApi,
+  listRecentTripsApi,
+  listTrendingAttractionsApi,
   listSavedTripsApi,
   listTripsApi,
   removeSavedTripForUserApi,
@@ -17,6 +19,7 @@ import {
   updateTripLikeApi,
   updateTripStatusApi,
 } from './itineraryApiService';
+
 
 const TRIPS_STORAGE_KEY = 'tripzo.trips.v1';
 const SAVED_TRIP_IDS_STORAGE_KEY = 'tripzo.savedTrips.v1';
@@ -46,6 +49,9 @@ const WASHROOM_MIN_GAP_STOPS = 2;
 const MAX_RESTAURANT_RECOMMENDATIONS_PER_DAY = 3;
 const MAX_ATM_RECOMMENDATIONS_PER_DAY = 1;
 const MAX_WASHROOM_RECOMMENDATIONS_PER_DAY = 1;
+const MEDICAL_STOP_INTERVAL = 6;
+const MEDICAL_MIN_GAP_STOPS = 5;
+const MAX_MEDICAL_RECOMMENDATIONS_PER_DAY = 1;
 
 function parseDateOnly(value) {
   const [year, month, day] = String(value || '').split('-').map((part) => Number(part));
@@ -556,13 +562,39 @@ export function categorizeTrips(trips) {
 export async function listTrips() {
   try {
     const trips = await listTripsApi();
-    return trips.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+    return trips.sort((a, b) => new Date(b.createdAt || b.startDate).getTime() - new Date(a.createdAt || a.startDate).getTime());
   } catch (_error) {
     const raw = await AsyncStorage.getItem(TRIPS_STORAGE_KEY);
     const trips = raw ? JSON.parse(raw) : [];
-    return trips.sort((a, b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime());
+    return trips.sort((a, b) => new Date(b.createdAt || b.startDate).getTime() - new Date(a.createdAt || a.startDate).getTime());
   }
 }
+
+export async function listRecentTrips() {
+  try {
+    return await listRecentTripsApi();
+  } catch (_error) {
+    // Fallback: replicate server logic locally using AsyncStorage data
+    const raw = await AsyncStorage.getItem(TRIPS_STORAGE_KEY);
+    const allTrips = raw ? JSON.parse(raw) : [];
+
+    // AsyncStorage only holds the current user's trips, so userTripCount = allTrips.length
+    const userTripCount = allTrips.length;
+
+    // Sort all local trips by createdAt descending
+    const sortedByCreated = [...allTrips].sort((a, b) => {
+      const aTime = new Date(a.createdAt || a.createdAtIso || 0).getTime();
+      const bTime = new Date(b.createdAt || b.createdAtIso || 0).getTime();
+      return bTime - aTime;
+    });
+
+    return {
+      trips: sortedByCreated.slice(0, 3),
+      userTripCount,
+    };
+  }
+}
+
 
 export async function saveTrip(trip) {
   try {
@@ -677,16 +709,13 @@ export async function listExploreTrips(filters = {}) {
   const params = normalizeExploreFilters(filters);
   try {
     const trips = await listExploreTripsApi(params);
-    return trips.filter((trip) => trip?.status === 'completed' && !trip?.isSaved);
+    return trips.filter((trip) => !trip?.isSaved);
   } catch (_error) {
     const allTrips = await listTrips();
     const savedIds = new Set(await loadSavedTripIdsLocal());
     const search = String(params.search || '').toLowerCase();
     return allTrips
       .filter((trip) => {
-        if (buildTripSections(trip) !== 'completed') {
-          return false;
-        }
         if (search) {
           const title = String(trip.title || '').toLowerCase();
           const place = String(trip.from?.label || '').toLowerCase();
@@ -727,6 +756,15 @@ export async function listLatestTrips(limit = 40) {
         return bTime - aTime;
       })
       .slice(0, safeLimit);
+  }
+}
+
+export async function listTrendingAttractions(limit = 3) {
+  const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(10, Math.floor(Number(limit)))) : 3;
+  try {
+    return await listTrendingAttractionsApi({ limit: safeLimit });
+  } catch (_error) {
+    return [];
   }
 }
 
@@ -868,9 +906,11 @@ export async function generateSmartItinerary(payload) {
   let lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
   let lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
   let lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+  let lastMedicalRecommendationAt = Number.NEGATIVE_INFINITY;
   let restaurantsRecommendedToday = 0;
   let atmsRecommendedToday = 0;
   let washroomsRecommendedToday = 0;
+  let medicalsRecommendedToday = 0;
   const finalizeCurrentDay = () => {
     const dayDate = new Date(parseDateOnly(startDate).getTime() + currentDayIndex * 24 * 60 * 60 * 1000);
     days.push({
@@ -888,9 +928,11 @@ export async function generateSmartItinerary(payload) {
     lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
     lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
     lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+    lastMedicalRecommendationAt = Number.NEGATIVE_INFINITY;
     restaurantsRecommendedToday = 0;
     atmsRecommendedToday = 0;
     washroomsRecommendedToday = 0;
+    medicalsRecommendedToday = 0;
   };
 
   for (let stopIndex = 0; stopIndex < orderedAttractions.length; stopIndex += 1) {
@@ -910,6 +952,7 @@ export async function generateSmartItinerary(payload) {
     const restaurantGap = dayStopPosition - lastRestaurantRecommendationAt;
     const atmGap = dayStopPosition - lastAtmRecommendationAt;
     const washroomGap = dayStopPosition - lastWashroomRecommendationAt;
+    const medicalGap = dayStopPosition - lastMedicalRecommendationAt;
 
     const shouldRecommendMeal =
       dayStopPosition % RESTAURANT_STOP_INTERVAL === 0 ||
@@ -931,11 +974,17 @@ export async function generateSmartItinerary(payload) {
         new Promise((resolve) => setTimeout(() => resolve([]), AMENITY_LOOKUP_TIMEOUT_MS)),
       ]);
       const budgetRange = BUDGET_RANGES[payload.budget] || BUDGET_RANGES.$;
-      const filteredByBudget = restaurants.filter((item) => {
+      const withinBudget = restaurants.filter((item) => {
         const level = derivePriceLevel(item.tags);
         return level >= budgetRange.min && level <= budgetRange.max;
       });
-      const topRestaurant = filteredByBudget[0] || restaurants[0];
+      const pool = withinBudget.length ? withinBudget : restaurants;
+      const topRestaurant = [...pool].sort((a, b) => {
+        const ratingCountA = Number(a.tags?.userRatingsTotal || 0);
+        const ratingCountB = Number(b.tags?.userRatingsTotal || 0);
+        if (ratingCountA !== ratingCountB) return ratingCountB - ratingCountA;
+        return Number(b.tags?.rating || 0) - Number(a.tags?.rating || 0);
+      })[0];
       const withFallback = topRestaurant || {
         id: `fallback-restaurant-${stop.id}`,
         label: `Restaurant near ${stop.label}`,
@@ -995,6 +1044,27 @@ export async function generateSmartItinerary(payload) {
         });
         lastWashroomRecommendationAt = dayStopPosition;
         washroomsRecommendedToday += 1;
+      }
+    }
+
+    const needsMedical =
+      dayStopPosition % MEDICAL_STOP_INTERVAL === 0 ||
+      (looksCommercialOrTransit(stop.label) && medicalGap >= MEDICAL_MIN_GAP_STOPS);
+    if (
+      shouldEnrichStop &&
+      needsMedical &&
+      medicalGap >= MEDICAL_MIN_GAP_STOPS &&
+      medicalsRecommendedToday < MAX_MEDICAL_RECOMMENDATIONS_PER_DAY
+    ) {
+      const medical = await fetchSmartRecommendation('medical', stop, 1500, 'Medical Shop');
+      if (medical) {
+        recommendations.push({
+          type: 'medical',
+          reason: 'Nearest pharmacy or clinic on route',
+          place: medical,
+        });
+        lastMedicalRecommendationAt = dayStopPosition;
+        medicalsRecommendedToday += 1;
       }
     }
 

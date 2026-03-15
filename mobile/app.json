@@ -16,6 +16,10 @@
     },
     "android": {
       "package": "com.deepakyadav2010.tripzo",
+      "statusBar": {
+        "barStyle": "dark-content",
+        "backgroundColor": "#ffffff"
+      },
       "adaptiveIcon": {
         "backgroundColor": "#ffffff",
         "foregroundImage": "./assets/icon.png",

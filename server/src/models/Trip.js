@@ -13,7 +13,7 @@ const locationSchema = new mongoose.Schema(
 
 const recommendationSchema = new mongoose.Schema(
   {
-    type: { type: String, enum: ['restaurant', 'atm', 'washroom'], required: true },
+    type: { type: String, enum: ['restaurant', 'atm', 'washroom', 'medical'], required: true },
     reason: { type: String, trim: true, default: '' },
     place: {
       id: { type: String, trim: true, default: '' },

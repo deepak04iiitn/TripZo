@@ -6,6 +6,8 @@ import {
   getTripById,
   listExploreTrips,
   listLatestTrips,
+  listRecentTrips,
+  listTrendingAttractions,
   listSavedTrips,
   listTrips,
   previewTripAttractions,
@@ -24,6 +26,8 @@ router.post('/attractions-preview', requireAuth, itineraryGenerateLimiter, previ
 router.post('/', requireAuth, createTrip);
 router.get('/explore', requireAuth, listExploreTrips);
 router.get('/latest', requireAuth, listLatestTrips);
+router.get('/recent', requireAuth, listRecentTrips);
+router.get('/trending-attractions', requireAuth, listTrendingAttractions);
 router.get('/saved', requireAuth, listSavedTrips);
 router.get('/', requireAuth, listTrips);
 router.post('/:tripId/save', requireAuth, saveTripForUser);
@@ -34,5 +38,3 @@ router.patch('/:tripId/like', requireAuth, updateTripLike);
 router.delete('/:tripId', requireAuth, deleteTrip);
 
 export default router;
-
-

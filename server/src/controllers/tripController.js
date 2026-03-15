@@ -1,5 +1,6 @@
 import Trip from '../models/Trip.js';
 import SavedTrip from '../models/SavedTrip.js';
+import PlaceCache from '../models/PlaceCache.js';
 import { generateItineraryPlan, previewCityAttractions } from '../services/itineraryPlannerService.js';
 import {
   validateAttractionPreviewPayload,
@@ -39,6 +40,86 @@ function normalizeOwner(ownerDoc) {
     username: ownerDoc.username || '',
     fullName: ownerDoc.fullName || '',
     profileImageUrl: ownerDoc.profileImageUrl || '',
+  };
+}
+
+const PLACE_PHOTO_URL = 'https://maps.googleapis.com/maps/api/place/photo';
+const BLOCKED_PLACE_TYPES = new Set([
+  'travel_agency',
+  'insurance_agency',
+  'real_estate_agency',
+  'finance',
+  'accounting',
+  'lawyer',
+  'car_rental',
+  'lodging',
+  'hospital',
+  'doctor',
+  'school',
+  'university',
+  'restaurant',
+  'food',
+  'cafe',
+  'meal_takeaway',
+  'meal_delivery',
+  'train_station',
+  'subway_station',
+  'transit_station',
+  'bus_station',
+]);
+const BLOCKED_NAME_KEYWORDS = [
+  'travel',
+  'travels',
+  'agency',
+  'tour and travels',
+  'restaurant',
+  'railway station',
+  'train station',
+  'metro station',
+  'junction',
+  'hotel',
+  'resort',
+  'guest house',
+  'guesthouse',
+  'hostel',
+  'inn',
+  'stay',
+  'stays',
+];
+
+function isValidTrendingAttraction(place = {}) {
+  const lowerName = String(place.name || '').toLowerCase();
+  const types = Array.isArray(place.types) ? place.types.map((type) => String(type || '').toLowerCase()) : [];
+  if (!lowerName) {
+    return false;
+  }
+  if (types.some((type) => BLOCKED_PLACE_TYPES.has(type))) {
+    return false;
+  }
+  if (BLOCKED_NAME_KEYWORDS.some((keyword) => lowerName.includes(keyword))) {
+    return false;
+  }
+  return true;
+}
+
+function mapTrendingAttraction(place) {
+  const photoReference = String(place.photoReference || '');
+  const key = process.env.GOOGLE_MAPS_API_KEY;
+  const imageUrl =
+    photoReference && key
+      ? `${PLACE_PHOTO_URL}?maxwidth=1400&photoreference=${encodeURIComponent(photoReference)}&key=${key}`
+      : '';
+  return {
+    id: String(place.placeId || ''),
+    label: String(place.name || ''),
+    latitude: Number(place.latitude),
+    longitude: Number(place.longitude),
+    imageUrl,
+    tags: {
+      rating: Number(place.rating || 0),
+      userRatingsTotal: Number(place.userRatingsTotal || 0),
+      placeTypes: Array.isArray(place.types) ? place.types : [],
+    },
   };
 }
 
@@ -137,6 +218,32 @@ export async function listTrips(req, res, next) {
   }
 }
 
+export async function listRecentTrips(req, res, next) {
+  try {
+    const userTripCount = await Trip.countDocuments({ userId: req.auth.userId });
+
+    let trips;
+    if (userTripCount >= 3) {
+      // Personalised: show the user's 3 most recently created trips
+      trips = await Trip.find({ userId: req.auth.userId })
+        .sort({ createdAt: -1 })
+        .limit(3);
+      trips = trips.map(publicTrip);
+    } else {
+      // Fallback: show the 3 most recently created trips app-wide
+      trips = await Trip.find({})
+        .populate('userId', 'username fullName profileImageUrl')
+        .sort({ createdAt: -1 })
+        .limit(3);
+      trips = trips.map((trip) => publicTrip(trip, { owner: trip.userId }));
+    }
+
+    return res.json({ trips, userTripCount });
+  } catch (error) {
+    return next(error);
+  }
+}
+
 export async function listExploreTrips(req, res, next) {
   try {
     const searchQuery = String(req.query?.search || '').trim();
@@ -196,7 +303,7 @@ export async function listExploreTrips(req, res, next) {
 
     const exploreTrips = trips
       .map((trip) => publicTrip(trip, { savedTripIds }))
-      .filter((trip) => trip.status === 'completed' && !trip.isSaved);
+      .filter((trip) => !trip.isSaved);
 
     return res.json({
       trips: exploreTrips,
@@ -218,6 +325,63 @@ export async function listLatestTrips(req, res, next) {
     return res.json({
       trips: trips.map(publicTrip),
     });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function listTrendingAttractions(req, res, next) {
+  try {
+    const limitQuery = Number(req.query?.limit);
+    const limit = Number.isFinite(limitQuery) ? Math.max(1, Math.min(Math.floor(limitQuery), 10)) : 3;
+
+    const aggregated = await PlaceCache.aggregate([
+      { $unwind: '$places' },
+      {
+        $match: {
+          'places.rating': { $gte: 3.5 },
+          'places.userRatingsTotal': { $gte: 20 },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          placeId: '$places.placeId',
+          name: '$places.name',
+          types: '$places.types',
+          latitude: '$places.latitude',
+          longitude: '$places.longitude',
+          rating: '$places.rating',
+          userRatingsTotal: '$places.userRatingsTotal',
+          photoReference: '$places.photoReference',
+        },
+      },
+      { $sort: { userRatingsTotal: -1, rating: -1 } },
+      {
+        $group: {
+          _id: '$placeId',
+          place: { $first: '$$ROOT' },
+        },
+      },
+      { $replaceRoot: { newRoot: '$place' } },
+      { $sort: { userRatingsTotal: -1, rating: -1 } },
+      { $limit: 80 },
+    ]);
+
+    const ranked = aggregated
+      .filter(isValidTrendingAttraction)
+      .sort((a, b) => {
+        const ratingsA = Number(a.userRatingsTotal || 0);
+        const ratingsB = Number(b.userRatingsTotal || 0);
+        if (ratingsA !== ratingsB) {
+          return ratingsB - ratingsA;
+        }
+        return Number(b.rating || 0) - Number(a.rating || 0);
+      })
+      .slice(0, limit)
+      .map(mapTrendingAttraction);
+
+    return res.json({ attractions: ranked });
   } catch (error) {
     return next(error);
   }

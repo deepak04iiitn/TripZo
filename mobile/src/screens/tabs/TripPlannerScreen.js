@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { requestLiveLocation } from '../../services/maps/locationService';
 import { geocodeWithPhoton, reverseGeocodeWithPhoton } from '../../services/maps/googleGeocodingService';
 import { fetchCityAttractionsPreview, generateSmartItinerary, saveTrip } from '../../services/itinerary/itineraryService';
+import { SKELETON_GRADIENT_COLORS, useSkeletonShimmer } from '../../utils/skeletonShimmer';
 
 const FALLBACK_IMAGE_URLS = [
   'https://lh3.googleusercontent.com/aida-public/AB6AXuDfupL4gqxmh2ZpjDq4-KH45SzTC6K89wX5ewCLjvAj5z7Nz0irNR7-_eiSH7BJQP2OXCk-JPYPQQ4RkBOCffIsqjdwaljQZQuO7if07wHOEzjG9cccPLO1_7U11sJKk4UGnM1rT6JmT3jiYyZALx3kZgdSaVpTNBzX4-NZ-ZmF50CaONyXN1kswyN_stHg07VOn2GTlvYRcx33-EGcbh7oSIGVMiNGjjZNw4_G6S1cLKBaYaJKC2mQf1oc2gjgPuhwlH2AIOfQEJ_L',
@@ -95,6 +96,7 @@ export default function TripPlannerScreen({
   const entranceAnim = useRef(new Animated.Value(0)).current;
   const loaderAnim = useRef(new Animated.Value(0)).current;
   const onBackRef = useRef(onBack);
+  const skeletonTranslateX = useSkeletonShimmer();
 
   useEffect(() => {
     onBackRef.current = onBack;
@@ -214,6 +216,19 @@ export default function TripPlannerScreen({
     loop.start();
     return () => loop.stop();
   }, [isLoadingAttractionPreview, loaderAnim]);
+
+  const SkeletonBlock = ({ style }) => (
+    <View style={[styles.skeletonBase, style]}>
+      <Animated.View style={[styles.skeletonShimmer, { transform: [{ translateX: skeletonTranslateX }] }]}>
+        <LinearGradient
+          colors={SKELETON_GRADIENT_COLORS}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={styles.skeletonShimmerGradient}
+        />
+      </Animated.View>
+    </View>
+  );
 
   const generatePlan = async (mode = planningMode) => {
     const phases = [
@@ -448,13 +463,15 @@ export default function TripPlannerScreen({
       {isPlanningTrip ? (
         <View style={styles.overlay}>
           <View style={styles.overlayCard}>
-            <View style={styles.spinnerWrap}>
-              <ActivityIndicator size='large' color='#ff6b6b' />
-            </View>
+            <SkeletonBlock style={styles.overlaySkeletonAvatar} />
             <Text style={styles.overlayTitle}>Optimizing your route...</Text>
             <Text style={styles.overlayText}>{planningStep}</Text>
             <View style={styles.progressTrack}>
               <View style={[styles.progressFill, { width: `${planningProgress}%` }]} />
+            </View>
+            <View style={styles.overlaySkeletonLines}>
+              <SkeletonBlock style={styles.overlaySkeletonLine} />
+              <SkeletonBlock style={[styles.overlaySkeletonLine, styles.overlaySkeletonLineShort]} />
             </View>
           </View>
         </View>
@@ -882,7 +899,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     right: 0,
-    bottom: 0,
+    bottom: -112,
     left: 0,
     zIndex: 40,
     backgroundColor: 'rgba(15,32,68,0.80)',
@@ -894,6 +911,27 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 300,
     alignItems: 'center',
+  },
+  skeletonBase: {
+    overflow: 'hidden',
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  skeletonShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 140,
+  },
+  skeletonShimmerGradient: {
+    flex: 1,
+  },
+  overlaySkeletonAvatar: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
   },
   spinnerWrap: {
     width: 80,
@@ -928,11 +966,24 @@ const styles = StyleSheet.create({
     height: '100%',
     backgroundColor: '#ff6b6b',
   },
+  overlaySkeletonLines: {
+    marginTop: 12,
+    width: '100%',
+    gap: 8,
+  },
+  overlaySkeletonLine: {
+    width: '100%',
+    height: 10,
+    borderRadius: 7,
+  },
+  overlaySkeletonLineShort: {
+    width: '74%',
+  },
   startupLoader: {
     position: 'absolute',
     top: 0,
     right: 0,
-    bottom: 0,
+    bottom: -112,
     left: 0,
     backgroundColor: '#0b1328',
     alignItems: 'center',

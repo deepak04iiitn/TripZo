@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   Image,
   ScrollView,
@@ -17,8 +18,10 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Polyline } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import ScreenTopBar from '../../navigation/components/ScreenTopBar';
 import { getAdminDashboardMetrics, getMe, updateProfile, uploadProfileImage } from '../../services/auth/authService';
+import { SKELETON_GRADIENT_COLORS, useSkeletonShimmer } from '../../utils/skeletonShimmer';
 
 const ACCOUNT_PROFILE = {
   name: 'Alex Coastal',
@@ -46,6 +49,23 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
   const [dashboardError, setDashboardError] = useState('');
   const [selectedRangeDays, setSelectedRangeDays] = useState(30);
   const [isExportingCsv, setIsExportingCsv] = useState(false);
+  const skeletonTranslateX = useSkeletonShimmer();
+
+  const SkeletonBlock = ({ style }) => (
+    <View style={[accountSkeletonStyles.base, style]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[accountSkeletonStyles.shimmer, { transform: [{ translateX: skeletonTranslateX }] }]}
+      >
+        <LinearGradient
+          colors={SKELETON_GRADIENT_COLORS}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={accountSkeletonStyles.shimmerGradient}
+        />
+      </Animated.View>
+    </View>
+  );
 
   useEffect(() => {
     if (!success) {
@@ -284,7 +304,17 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
         <View style={styles.screenContent}>
           <ScreenTopBar activeRoute="Account" styles={styles} />
           <View style={[styles.screenBody, styles.accountLoadingWrap]}>
-            <ActivityIndicator size="large" color="#FF6B6B" />
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.accountScrollContent}>
+              <View style={styles.accountProfileWrap}>
+                <SkeletonBlock style={accountSkeletonStyles.avatar} />
+                <SkeletonBlock style={accountSkeletonStyles.name} />
+                <SkeletonBlock style={accountSkeletonStyles.username} />
+              </View>
+              <SkeletonBlock style={accountSkeletonStyles.card} />
+              <SkeletonBlock style={accountSkeletonStyles.card} />
+              <SkeletonBlock style={accountSkeletonStyles.action} />
+              <SkeletonBlock style={accountSkeletonStyles.action} />
+            </ScrollView>
           </View>
         </View>
       </SafeAreaView>
@@ -436,7 +466,9 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
 
               {isDashboardLoading ? (
                 <View style={adminStyles.loaderWrap}>
-                  <ActivityIndicator size="large" color="#FF6B6B" />
+                  <SkeletonBlock style={adminStyles.adminSkeletonHero} />
+                  <SkeletonBlock style={adminStyles.adminSkeletonMetric} />
+                  <SkeletonBlock style={adminStyles.adminSkeletonMetric} />
                 </View>
               ) : (
                 <>
@@ -730,6 +762,50 @@ function MiniSparkline({ data, color }) {
   );
 }
 
+const accountSkeletonStyles = StyleSheet.create({
+  base: {
+    overflow: 'hidden',
+    borderRadius: 12,
+    backgroundColor: '#E2E8F0',
+  },
+  shimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 140,
+  },
+  shimmerGradient: {
+    flex: 1,
+  },
+  avatar: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+  },
+  name: {
+    marginTop: 12,
+    width: 180,
+    height: 20,
+    borderRadius: 8,
+  },
+  username: {
+    marginTop: 8,
+    width: 130,
+    height: 14,
+    borderRadius: 8,
+  },
+  card: {
+    width: '100%',
+    minHeight: 132,
+    borderRadius: 16,
+  },
+  action: {
+    width: '100%',
+    height: 50,
+    borderRadius: 12,
+  },
+});
+
 const adminStyles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 14,
@@ -865,11 +941,17 @@ const adminStyles = StyleSheet.create({
     fontSize: 11,
   },
   loaderWrap: {
-    height: 220,
+    gap: 12,
+  },
+  adminSkeletonHero: {
+    width: '100%',
+    height: 160,
     borderRadius: 16,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
+  },
+  adminSkeletonMetric: {
+    width: '100%',
+    height: 118,
+    borderRadius: 16,
   },
   metricsGrid: {
     flexDirection: 'column',

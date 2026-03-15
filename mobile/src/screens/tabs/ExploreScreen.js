@@ -23,6 +23,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import ScreenTopBar from '../../navigation/components/ScreenTopBar';
 import { listExploreTrips, saveTripForUser } from '../../services/itinerary/itineraryService';
+import { SKELETON_GRADIENT_COLORS, useSkeletonShimmer } from '../../utils/skeletonShimmer';
 
 const SORT_OPTIONS = [
   { key: 'newest', label: 'Newest' },
@@ -74,6 +75,7 @@ export default function ExploreScreen({ styles }) {
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [isSwiping, setIsSwiping] = useState(false);
   const [showSwipeIndicator, setShowSwipeIndicator] = useState(false);
+  const skeletonTranslateX = useSkeletonShimmer();
 
   const fetchCards = useCallback(
     async (nextFilters = filters, nextSearchText = searchText) => {
@@ -237,6 +239,19 @@ export default function ExploreScreen({ styles }) {
     [stopSwipeIndicator]
   );
 
+  const SkeletonBlock = ({ style }) => (
+    <View style={[screenStyles.skeletonBase, style]}>
+      <Animated.View style={[screenStyles.skeletonShimmer, { transform: [{ translateX: skeletonTranslateX }] }]}>
+        <LinearGradient
+          colors={SKELETON_GRADIENT_COLORS}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={screenStyles.skeletonShimmerGradient}
+        />
+      </Animated.View>
+    </View>
+  );
+
   const leftHintOpacity = swipeIndicatorAnim.interpolate({
     inputRange: [0, 0.25, 0.6, 1],
     outputRange: [0.2, 0.92, 0.45, 0.2],
@@ -304,9 +319,13 @@ export default function ExploreScreen({ styles }) {
 
             <View style={[screenStyles.deckWrap, { minHeight: deckMinHeight }]}>
               {isLoading ? (
-                <View style={screenStyles.emptyCard}>
-                  <ActivityIndicator color="#FF6B6B" />
-                  <Text style={screenStyles.emptyTitle}>Loading itineraries...</Text>
+                <View style={[screenStyles.card, { height: cardHeight }]}>
+                  <SkeletonBlock style={screenStyles.skeletonHeroImage} />
+                  <View style={screenStyles.skeletonExploreBody}>
+                    <SkeletonBlock style={screenStyles.skeletonExploreTitle} />
+                    <SkeletonBlock style={screenStyles.skeletonExploreMeta} />
+                    <SkeletonBlock style={screenStyles.skeletonExploreMetaWide} />
+                  </View>
                 </View>
               ) : null}
 
@@ -418,7 +437,7 @@ export default function ExploreScreen({ styles }) {
                   <Ionicons name="close" size={22} color="#BE123C" />
                 </TouchableOpacity>
                 <TouchableOpacity style={screenStyles.actionSaveBtn} onPress={() => swipeOut('right')} activeOpacity={0.95}>
-                  <LinearGradient colors={['#34D399', '#10B981']} style={screenStyles.actionSaveGradient}>
+                  <LinearGradient colors={['#FF6B6B', '#FF9F43']} style={screenStyles.actionSaveGradient}>
                     <Ionicons name="bookmark" size={20} color="#FFFFFF" />
                   </LinearGradient>
                 </TouchableOpacity>
@@ -550,6 +569,47 @@ const screenStyles = StyleSheet.create({
   deckWrap: {
     minHeight: 520,
     justifyContent: 'center',
+  },
+  skeletonBase: {
+    overflow: 'hidden',
+    borderRadius: 10,
+    backgroundColor: '#E2E8F0',
+  },
+  skeletonShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 140,
+  },
+  skeletonShimmerGradient: {
+    flex: 1,
+  },
+  skeletonHeroImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 26,
+    backgroundColor: '#CBD5E1',
+  },
+  skeletonExploreBody: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    bottom: 16,
+    gap: 8,
+  },
+  skeletonExploreTitle: {
+    width: '68%',
+    height: 28,
+    borderRadius: 8,
+  },
+  skeletonExploreMeta: {
+    width: '44%',
+    height: 12,
+    borderRadius: 6,
+  },
+  skeletonExploreMetaWide: {
+    width: '52%',
+    height: 12,
+    borderRadius: 6,
   },
   nextCardPreview: {
     position: 'absolute',
@@ -756,7 +816,7 @@ const screenStyles = StyleSheet.create({
     height: 66,
     borderRadius: 33,
     overflow: 'hidden',
-    shadowColor: '#10B981',
+    shadowColor: '#FF6B6B',
     shadowOpacity: 0.35,
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 8 },

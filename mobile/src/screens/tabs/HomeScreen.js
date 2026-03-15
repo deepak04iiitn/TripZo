@@ -4,6 +4,7 @@ import {
   Alert,
   Animated,
   Image,
+  ImageBackground,
   Modal,
   Platform,
   Pressable,
@@ -30,45 +31,10 @@ import {
   reverseGeocodeWithPhoton,
 } from '../../services/maps/googleGeocodingService';
 import {
-  listLatestTrips,
-  listTrips,
+  listRecentTrips,
+  listTrendingAttractions,
 } from '../../services/itinerary/itineraryService';
-
-const TRIP_PLANNING_ESSENTIALS = [
-  {
-    id: 'smart-route',
-    title: 'Smart Route Flow',
-    description: 'Stops sequenced to reduce backtracking and save travel time.',
-    icon: 'git-network-outline',
-    accent: '#0EA5E9',
-    badge: 'Efficiency',
-  },
-  {
-    id: 'balanced-days',
-    title: 'Balanced Day Split',
-    description: 'Auto-balances your day plan for better pace and coverage.',
-    icon: 'calendar-clear-outline',
-    accent: '#8B5CF6',
-    badge: 'Scheduling',
-  },
-  {
-    id: 'budget-aware',
-    title: 'Budget-Aware Picks',
-    description: 'Suggestions align with your selected budget tier and schedule.',
-    icon: 'wallet-outline',
-    accent: '#10B981',
-    badge: 'Cost',
-  },
-];
-
-const TRAVEL_CHECKLIST = [
-  { id: 'passport', label: 'Passport and IDs ready', icon: 'card-outline' },
-  { id: 'bookings', label: 'Hotel confirmation saved', icon: 'bed-outline' },
-  { id: 'essentials', label: 'Essentials packing list', icon: 'cube-outline' },
-  { id: 'payments', label: 'Cards, cash and UPI backup set', icon: 'wallet-outline' },
-  { id: 'maps', label: 'Offline maps and key addresses saved', icon: 'map-outline' },
-  { id: 'emergency', label: 'Emergency contacts and documents backed up', icon: 'shield-checkmark-outline' },
-];
+import { SKELETON_GRADIENT_COLORS, useSkeletonShimmer } from '../../utils/skeletonShimmer';
 
 const SMART_TIPS = [
   {
@@ -95,6 +61,62 @@ const SMART_TIPS = [
     title: 'Smart Tip',
     text: 'Save key addresses and transport notes offline in case your mobile data drops mid-trip.',
   },
+];
+
+const COMMUNITY_TIPS = [
+  {
+    id: 'budget-hack',
+    tag: 'Budget Hack',
+    icon: 'bulb-outline',
+    accent: '#FF6B6B',
+    bg: 'rgba(255,107,107,0.08)',
+    border: 'rgba(255,107,107,0.2)',
+    text: 'Book museum tickets online 48h in advance to save up to 15% and skip the lines.',
+  },
+  {
+    id: 'local-secret',
+    tag: 'Local Secret',
+    icon: 'compass-outline',
+    accent: '#FF9F43',
+    bg: 'rgba(255,159,67,0.10)',
+    border: 'rgba(255,159,67,0.24)',
+    text: 'In Tokyo, the best sushi is often found in the small basements of subway stations.',
+  },
+  {
+    id: 'packing-pro',
+    tag: 'Packing Pro',
+    icon: 'briefcase-outline',
+    accent: '#0EA5E9',
+    bg: 'rgba(14,165,233,0.10)',
+    border: 'rgba(14,165,233,0.24)',
+    text: 'Roll your clothes instead of folding them to save up to 25% of space in your suitcase.',
+  },
+  {
+    id: 'transit-trick',
+    tag: 'Transit Trick',
+    icon: 'subway-outline',
+    accent: '#8B5CF6',
+    bg: 'rgba(139,92,246,0.10)',
+    border: 'rgba(139,92,246,0.24)',
+    text: 'Buy day passes for public transit at the airport before you head to your hotel to save cash.',
+  },
+  {
+    id: 'foodie-find',
+    tag: 'Foodie Find',
+    icon: 'restaurant-outline',
+    accent: '#10B981',
+    bg: 'rgba(16,185,129,0.10)',
+    border: 'rgba(16,185,129,0.24)',
+    text: 'Skip restaurants right next to major tourist traps. Walk 3 blocks away for local prices.',
+  },
+];
+
+const PRE_PLANNING_TASKS = [
+  { id: 'book-flights', label: 'Book Flights', completed: true },
+  { id: 'travel-insurance', label: 'Travel Insurance', completed: true },
+  { id: 'pack-essentials', label: 'Pack Essentials', completed: false },
+  { id: 'currency-exchange', label: 'Currency Exchange', completed: false },
+  { id: 'visa-check', label: 'Check Visa Requirements', completed: false },
 ];
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -337,10 +359,12 @@ export default function HomeScreen({ styles }) {
   const [securityPromptError, setSecurityPromptError] = useState('');
   const [isSecurityPromptSaving, setIsSecurityPromptSaving] = useState(false);
   const [recentTrips, setRecentTrips] = useState([]);
+  const [userTripCount, setUserTripCount] = useState(0);
   const [isLoadingRecentTrips, setIsLoadingRecentTrips] = useState(false);
-  const [latestItineraries, setLatestItineraries] = useState([]);
-  const [isLoadingLatestItineraries, setIsLoadingLatestItineraries] = useState(false);
+  const [trendingAttractions, setTrendingAttractions] = useState([]);
+  const [isLoadingTrendingAttractions, setIsLoadingTrendingAttractions] = useState(false);
   const [smartTipIndex, setSmartTipIndex] = useState(0);
+  const [isFetchingLocation, setIsFetchingLocation] = useState(false);
   const fromLocationRef = useRef('');
   const fromSelectedPlaceRef = useRef(null);
   const fromEditedManuallyRef = useRef(false);
@@ -356,6 +380,7 @@ export default function HomeScreen({ styles }) {
   }, [fromSelectedPlace]);
 
   const applyResolvedLiveLocation = useCallback(async ({ silent = false, onlyIfUntouched = false } = {}) => {
+    setIsFetchingLocation(true);
     try {
       const location = await requestLiveLocation();
       const areaName = await reverseGeocodeWithPhoton(
@@ -381,6 +406,8 @@ export default function HomeScreen({ styles }) {
         Alert.alert('Location needed', error.message || 'Please allow location access to use GPS start point.');
       }
       return null;
+    } finally {
+      setIsFetchingLocation(false);
     }
   }, []);
 
@@ -443,6 +470,7 @@ export default function HomeScreen({ styles }) {
   }, [smartTipAnim]);
 
   const currentSmartTip = SMART_TIPS[smartTipIndex] || SMART_TIPS[0];
+  const skeletonTranslateX = useSkeletonShimmer();
 
   const triggerHaptic = useCallback((kind = 'light') => {
     if (Platform.OS === 'web') {
@@ -472,27 +500,30 @@ export default function HomeScreen({ styles }) {
 
   const loadRecentTrips = useCallback(async () => {
     setIsLoadingRecentTrips(true);
-    setIsLoadingLatestItineraries(true);
+    setIsLoadingTrendingAttractions(true);
     try {
-      const [tripsResult, latestResult] = await Promise.allSettled([listTrips(), listLatestTrips(80)]);
-      const trips = tripsResult.status === 'fulfilled' ? tripsResult.value : [];
+      const [recentResult, trendingResult] = await Promise.allSettled([
+        listRecentTrips(),
+        listTrendingAttractions(3),
+      ]);
 
-      setRecentTrips(trips.slice(0, RECENT_TRIPS_LIMIT));
+      if (recentResult.status === 'fulfilled') {
+        setRecentTrips(recentResult.value.trips || []);
+        setUserTripCount(recentResult.value.userTripCount ?? 0);
+      } else {
+        setRecentTrips([]);
+        setUserTripCount(0);
+      }
 
-      const latestFromAllTrips = latestResult.status === 'fulfilled' ? latestResult.value : [];
-      const latestSource = latestFromAllTrips.length ? latestFromAllTrips : trips;
-      const latestSorted = [...latestSource].sort((a, b) => {
-        const aTime = new Date(a.createdAt || a.createdAtIso || a.updatedAt || a.startDate || 0).getTime();
-        const bTime = new Date(b.createdAt || b.createdAtIso || b.updatedAt || b.startDate || 0).getTime();
-        return bTime - aTime;
-      });
-      setLatestItineraries(latestSorted.slice(0, 8));
+      const topTrending = trendingResult.status === 'fulfilled' ? trendingResult.value : [];
+      setTrendingAttractions(topTrending.slice(0, 3));
     } catch (_error) {
       setRecentTrips([]);
-      setLatestItineraries([]);
+      setUserTripCount(0);
+      setTrendingAttractions([]);
     } finally {
       setIsLoadingRecentTrips(false);
-      setIsLoadingLatestItineraries(false);
+      setIsLoadingTrendingAttractions(false);
     }
   }, []);
 
@@ -580,10 +611,45 @@ export default function HomeScreen({ styles }) {
     setPlannerView('planning');
   };
 
+  const SkeletonBlock = ({ style }) => (
+    <View style={[localStyles.skeletonBase, style]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          localStyles.skeletonShimmer,
+          {
+            transform: [{ translateX: skeletonTranslateX }],
+          },
+        ]}
+      >
+        <LinearGradient
+          colors={SKELETON_GRADIENT_COLORS}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={localStyles.skeletonShimmerGradient}
+        />
+      </Animated.View>
+    </View>
+  );
+
   return (
-    <SafeAreaView style={styles.screenSafe} edges={['left', 'right']}>
+    <SafeAreaView style={[styles.screenSafe, localStyles.premiumRoot]} edges={['left', 'right']}>
       <View style={styles.screenContent}>
         <ScreenTopBar activeRoute="Home" styles={styles} />
+        
+        <Modal visible={isFetchingLocation} transparent animationType="fade">
+          <View style={localStyles.loaderOverlay}>
+            <View style={localStyles.loaderCard}>
+              <View style={localStyles.loaderIconWrap}>
+                <Ionicons name="location" size={32} color="#0EA5E9" />
+              </View>
+              <Text style={localStyles.loaderTitle}>Fetching your live location...</Text>
+              <Text style={localStyles.loaderSubtitle}>Just a moment while we find you</Text>
+              <ActivityIndicator size="small" color="#0EA5E9" style={localStyles.loaderSpinner} />
+            </View>
+          </View>
+        </Modal>
+
         <Modal
           visible={securityPromptVisible}
           transparent
@@ -693,7 +759,13 @@ export default function HomeScreen({ styles }) {
             </Pressable>
           </Pressable>
         </Modal>
-        <View style={[styles.screenBody, plannerView === 'planning' && localStyles.plannerScreenBody]}>
+        <View
+          style={[
+            styles.screenBody,
+            localStyles.homeScreenBody,
+            plannerView === 'planning' && localStyles.plannerScreenBody,
+          ]}
+        >
           {plannerView === 'planning' ? (
             <TripPlannerScreen
               fromLocation={fromLocation}
@@ -709,319 +781,334 @@ export default function HomeScreen({ styles }) {
               }}
             />
           ) : (
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.homeScrollContent}>
-              <>
-              <View style={styles.homeHero}>
-              <View style={styles.homeHeroHeaderRow}>
-                <View style={styles.homeHeroBadge}>
-                  <Ionicons name="map-outline" size={12} color="#0F2044" />
-                  <Text style={styles.homeHeroBadgeText}>Smart Planner</Text>
-                </View>
-              </View>
-              <Text style={styles.homeHeroTitle}>Plan Smarter, Travel Better</Text>
-              <Text style={styles.homeHeroSubtitle}>
-                Build optimized itineraries in seconds with live location and budget-aware routing.
-              </Text>
-              <View style={styles.heroStatRow}>
-                <View style={styles.heroStatChip}>
-                  <Ionicons name="time-outline" size={13} color="#0EA5E9" />
-                  <Text style={styles.heroStatText} numberOfLines={1} ellipsizeMode="tail">
-                    Avg plan time: 10 sec
-                  </Text>
-                </View>
-                <View style={styles.heroStatChip}>
-                  <Ionicons name="git-network-outline" size={13} color="#8B5CF6" />
-                  <Text style={styles.heroStatText} numberOfLines={1} ellipsizeMode="tail">
-                    Optimized routes
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.itineraryCard}>
-              <LinearGradient
-                colors={['#FF6B6B', '#FF8E53', '#FFC947']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.itineraryTopStrip}
-              />
-              <View style={styles.itineraryHeader}>
-                <View>
-                  <Text style={styles.itineraryEyebrow}>TripZo Planner</Text>
-                  <Text style={styles.itineraryTitle}>Build your itinerary</Text>
-                  <Text style={styles.itinerarySubtitle}>Personalized by preferences and budget</Text>
-                </View>
-                <View style={styles.itineraryBadge}>
-                  <Ionicons name="compass-outline" size={14} color="#FF6B6B" />
-                </View>
-              </View>
-              
-
-              <View style={styles.inputBlock}>
-                <Text style={styles.inputLabel}>Destination</Text>
-                <View style={styles.inputRow}>
-                  <Ionicons name="navigate-outline" size={18} color="#FF6B6B" style={styles.inputIcon} />
-                  <TextInput
-                    style={[styles.textInput, localStyles.fromInputWithLiveButton]}
-                    placeholder="Current location / city / landmark"
-                    placeholderTextColor="#94A3B8"
-                    value={fromLocation}
-                    onFocus={() => setActiveSuggestionField('from')}
-                    onChangeText={(value) => {
-                      fromEditedManuallyRef.current = true;
-                      setFromLocation(value);
-                      setFromSelectedPlace(null);
-                      setActiveSuggestionField('from');
-                    }}
-                  />
-                  <TouchableOpacity
-                    activeOpacity={0.8}
-                    style={localStyles.liveLocationButton}
-                    onPress={() => {
-                      triggerHaptic('light');
-                      useLiveFromLocation();
-                    }}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={localStyles.premiumScrollContent}
+            >
+              <View style={localStyles.premiumPlannerCard}>
+                <ImageBackground
+                  source={{
+                    uri:
+                      'https://lh3.googleusercontent.com/aida-public/AB6AXuAtHCCGWUzIlodb3PSfVTTcWCaOkqcAiWU_e2_bMv65UCGf_yuGGzZTIVcGn8woMXyEbESMefmrt5ZbvX1yj_MGWfz9hl0MgPelwmlY4J4GypcHGf0a4KaKNXzYI6lIWuAslftHvsK6DrNg0-g37aZBnli3Ryj1Vq4eV3H2Yn3x4nmQnm7AlCyXijJLPW24ScmXLTeQcaQygchKKNqanIpjG4PeIN5iskeyhkbvZ5HLkDdQMrf-pMeE3PKww-tnpowQkoP_MO0AfRr_',
+                  }}
+                  style={localStyles.premiumHeroImage}
+                >
+                  <LinearGradient
+                    colors={['rgba(26,42,108,0.12)', 'rgba(26,42,108,0.72)']}
+                    start={{ x: 0.5, y: 0 }}
+                    end={{ x: 0.5, y: 1 }}
+                    style={localStyles.premiumHeroOverlay}
                   >
-                    <Ionicons name="locate" size={16} color="#0EA5E9" />
+                    <Text style={localStyles.premiumHeroEyebrow}>Route, Time & Cost Optimized</Text>
+                    <Text style={localStyles.premiumHeroTitle}>Your Personal Travel Guide</Text>
+                    <Text style={localStyles.premiumHeroSubtitle}>
+                      Discover optimized routes and clear navigation to explore every destination smoothly and confidently.
+                    </Text>
+                  </LinearGradient>
+                </ImageBackground>
+
+                <View style={localStyles.premiumPlannerBody}>
+                  <View style={localStyles.premiumStarterRow}>
+                    <View style={localStyles.premiumStarterBar} />
+                    <Text style={localStyles.premiumStarterText}>Start your instant trip</Text>
+                  </View>
+
+                  <View style={localStyles.premiumFieldBlock}>
+                    <Text style={localStyles.premiumFieldLabel}>Destination</Text>
+                    <View style={localStyles.premiumInputRow}>
+                      <Ionicons name="trail-sign-outline" size={18} color="#FF6B6B" style={localStyles.premiumInputIcon} />
+                      <TextInput
+                        style={localStyles.premiumTextInput}
+                        placeholder="e.g. Kyoto, Japan"
+                        placeholderTextColor="#94A3B8"
+                        value={fromLocation}
+                        onFocus={() => setActiveSuggestionField('from')}
+                        onChangeText={(value) => {
+                          fromEditedManuallyRef.current = true;
+                          setFromLocation(value);
+                          setFromSelectedPlace(null);
+                          setActiveSuggestionField('from');
+                        }}
+                      />
+                      <TouchableOpacity
+                        activeOpacity={0.86}
+                        style={localStyles.liveLocationButton}
+                        onPress={() => {
+                          triggerHaptic('light');
+                          useLiveFromLocation();
+                        }}
+                      >
+                        <Ionicons name="locate" size={16} color="#0EA5E9" />
+                      </TouchableOpacity>
+                    </View>
+                    {activeSuggestionField === 'from' && fromSuggestions.length > 0 && (
+                      <View style={localStyles.suggestionCard}>
+                        {fromSuggestions.map((suggestion) => (
+                          <TouchableOpacity
+                            key={`from-${suggestion.id}`}
+                            style={localStyles.suggestionRow}
+                            activeOpacity={0.85}
+                            onPress={() => pickSuggestion(suggestion)}
+                          >
+                            <Ionicons name="location-outline" size={14} color="#0EA5E9" />
+                            <View style={localStyles.suggestionTextWrap}>
+                              <Text style={localStyles.suggestionTitle}>{suggestion.label}</Text>
+                              {!!suggestion.subtitle && (
+                                <Text style={localStyles.suggestionSubtitle}>{suggestion.subtitle}</Text>
+                              )}
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    )}
+                  </View>
+
+                  <View style={localStyles.premiumTwoColRow}>
+                    <View style={localStyles.premiumCol}>
+                      <Text style={localStyles.premiumFieldLabel}>Travel Dates</Text>
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        style={localStyles.premiumInputRow}
+                        onPress={() => setShowDateRangePicker(true)}
+                      >
+                        <Ionicons name="calendar-clear-outline" size={18} color="#FF6B6B" style={localStyles.premiumInputIcon} />
+                        <Text style={localStyles.premiumDropdownText} numberOfLines={1}>
+                          {startDate && endDate ? `${formatIsoDate(startDate)} - ${formatIsoDate(endDate)}` : 'Pick dates'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+
+                    <View style={localStyles.premiumCol}>
+                      <Text style={localStyles.premiumFieldLabel}>Budget</Text>
+                      <TouchableOpacity
+                        activeOpacity={0.9}
+                        style={localStyles.premiumInputRow}
+                        onPress={() => setShowBudgetPicker(true)}
+                      >
+                        <Ionicons name="wallet-outline" size={18} color="#FF6B6B" style={localStyles.premiumInputIcon} />
+                        <Text style={localStyles.premiumDropdownText}>
+                          {BUDGET_OPTIONS.find((option) => option.key === budget)?.label || 'Select'}
+                        </Text>
+                        <Ionicons name="chevron-down" size={16} color="#94A3B8" style={localStyles.premiumChevron} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  {!!durationDays && (
+                    <Text style={localStyles.durationLabel}>
+                      Duration: {durationDays} day{durationDays > 1 ? 's' : ''}
+                    </Text>
+                  )}
+
+                  <TouchableOpacity activeOpacity={0.92} style={localStyles.premiumPlanButtonWrap} onPress={startPlannerFlow}>
+                    <LinearGradient
+                      colors={['#FF6B6B', '#FF9F43']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={localStyles.premiumPlanButton}
+                    >
+                      <Text style={localStyles.premiumPlanButtonText}>Plan my Trip</Text>
+                      <Ionicons name="airplane-outline" size={18} color="#FFFFFF" />
+                    </LinearGradient>
                   </TouchableOpacity>
                 </View>
-                {activeSuggestionField === 'from' && fromSuggestions.length > 0 && (
-                  <View style={localStyles.suggestionCard}>
-                    {fromSuggestions.map((suggestion) => (
-                      <TouchableOpacity
-                        key={`from-${suggestion.id}`}
-                        style={localStyles.suggestionRow}
-                        activeOpacity={0.85}
-                        onPress={() => pickSuggestion(suggestion)}
-                      >
-                        <Ionicons name="location-outline" size={14} color="#0EA5E9" />
-                        <View style={localStyles.suggestionTextWrap}>
-                          <Text style={localStyles.suggestionTitle}>{suggestion.label}</Text>
-                          {!!suggestion.subtitle && <Text style={localStyles.suggestionSubtitle}>{suggestion.subtitle}</Text>}
-                        </View>
-                      </TouchableOpacity>
+              </View>
+
+              <View style={localStyles.premiumSectionHead}>
+                <Text style={localStyles.premiumSectionTitle}>
+                  {userTripCount >= 3 ? 'Your Recent Trips' : 'Recent Trips'}
+                </Text>
+                {userTripCount >= 3 && (
+                  <TouchableOpacity activeOpacity={0.85} style={localStyles.inlineLink} onPress={() => navigation.navigate('Trips')}>
+                    <Text style={localStyles.inlineLinkText}>View All</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#FF6B6B" />
+                  </TouchableOpacity>
+                )}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.premiumHorizontalRow}>
+                {isLoadingRecentTrips ? (
+                  <View style={localStyles.skeletonRecentRow}>
+                    {[0, 1, 2].map((item) => (
+                      <View key={`recent-skeleton-${item}`} style={localStyles.journeyCard}>
+                        <SkeletonBlock style={localStyles.skeletonJourneyImage} />
+                        <SkeletonBlock style={localStyles.skeletonJourneyTitle} />
+                        <SkeletonBlock style={localStyles.skeletonJourneyMeta} />
+                      </View>
                     ))}
+                  </View>
+                ) : recentTrips.length ? (
+                  recentTrips.map((trip) => (
+                    <TouchableOpacity
+                      key={trip.id}
+                      activeOpacity={0.9}
+                      style={localStyles.journeyCard}
+                      onPress={() => navigation.navigate('Trips')}
+                    >
+                      <Image
+                        source={{
+                          uri:
+                            trip.coverImageUrl ||
+                            'https://lh3.googleusercontent.com/aida-public/AB6AXuAgqSe4qO0Vn7HWklIiOQ6Ab5qjZsvUm5l8i2pAZTdxX_VqcWEGvMpcrMN1XmvmmR1Z-Z0TOIEetAHAgTpNe612c_mfW6R47T51plH14h7FIr1QP_MXBjvbRmBPXcM444VMqIz6nEUv7fQBnwXMOraEmEi0QNRVZyFu1Fx4LpEFG04Opjb1oGy_AuKIsXAO9Bbagb7eYEST7nY0FB5cDEN3zv3BADUnfDeUqqMSbGovD24sc5KVERTcNvMbS8Wu1F17wcPtEJLWnX6d',
+                        }}
+                        style={localStyles.journeyImage}
+                      />
+                      <Text style={localStyles.journeyTitle} numberOfLines={1}>
+                        {trip.title || 'Untitled trip'}
+                      </Text>
+                      <Text style={localStyles.journeyMeta}>
+                        {trip.startDate && trip.endDate
+                          ? `${formatIsoDate(trip.startDate)} - ${formatIsoDate(trip.endDate)}`
+                          : 'Dates unavailable'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={localStyles.recentTripsStateCard}>
+                    <Ionicons name="briefcase-outline" size={18} color="#94A3B8" />
+                    <Text style={localStyles.recentTripsStateText}>No recent trips yet. Plan one to see it here.</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <View style={localStyles.premiumStackSection}>
+                <View style={localStyles.premiumSectionTitleRow}>
+                  <Text style={localStyles.premiumSectionTitle}>Trending Destinations</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.85}
+                    style={localStyles.inlineLink}
+                    onPress={() => navigation.navigate('Explore')}
+                  >
+                    <Text style={localStyles.inlineLinkText}>Explore</Text>
+                    <Ionicons name="arrow-forward" size={12} color="#FF6B6B" />
+                  </TouchableOpacity>
+                </View>
+                {isLoadingTrendingAttractions ? (
+                  [0, 1].map((item) => (
+                    <View key={`trending-skeleton-${item}`} style={localStyles.trendingCard}>
+                      <SkeletonBlock style={localStyles.skeletonTrendingImage} />
+                      <View style={localStyles.skeletonTrendingBottom}>
+                        <SkeletonBlock style={localStyles.skeletonTrendingCountry} />
+                        <SkeletonBlock style={localStyles.skeletonTrendingTitle} />
+                        <SkeletonBlock style={localStyles.skeletonTrendingMeta} />
+                      </View>
+                    </View>
+                  ))
+                ) : trendingAttractions.length ? (
+                  trendingAttractions.map((place, index) => (
+                    <TouchableOpacity
+                      key={place.id || `trending-fallback-${index}`}
+                      activeOpacity={0.92}
+                      style={localStyles.trendingCard}
+                      onPress={() => navigation.navigate('Trips')}
+                    >
+                      <Image
+                        source={{
+                          uri:
+                            place.imageUrl ||
+                            (index % 2 === 0
+                              ? 'https://lh3.googleusercontent.com/aida-public/AB6AXuBZs8yOKPph1zu9wdLWAltLfE7PlOm4QCkvCRMfid2Nilc6EOQMuU_1adYywcrn7MRDBx0U1ubSUSM2UXdoFGJrBwgL-PNe0rW8T7_E1tokmJ9yGhWC0V96JPGGcNwRBe6Tl1q1kr0mJ_6_U-NOjO0_cdxRpza7__zjc9PGFHbDahAK_1g6oqBcE6ioiWLRfqoCHyCH-OL7-JpaB4Zda5JKWvL4_tawuaNuOOKrSZLn_LZwYQKUB9VyfPWmr6_vGoD-zkE8waiE8dnB'
+                              : 'https://lh3.googleusercontent.com/aida-public/AB6AXuAA9PywXUbbSbT2lIEisFaBY0GT21cbBPf9eyh1S0TN65chPN3Mj5l4cBO7R6GCszXypIscUbL0rNcJiGWpFQHe_Rs3szhuALZTcEDUAqesuYmz2F35qOezZU0v1HDkRPcA1YKoNoRABLIZCs0kwuIIB_rzG-U1uAWH9zYt-Rwd7SoA-VfNDYOrH67hbOhvxZwkpDhxFwKfGxYdGezCCVLuWImAaZsAZOrWIvhZrS-3zqjT2I4teM0qB3jth02fwc7nrUyD0m8wtcW5'),
+                        }}
+                        style={localStyles.trendingImage}
+                        resizeMode="cover"
+                      />
+                      <LinearGradient
+                        colors={['transparent', 'rgba(0,0,0,0.75)']}
+                        start={{ x: 0.5, y: 0.2 }}
+                        end={{ x: 0.5, y: 1 }}
+                        style={localStyles.trendingOverlay}
+                      >
+                        <View style={localStyles.trendingBottomRow}>
+                          <View style={localStyles.trendingTextCol}>
+                            <Text style={localStyles.trendingCountry}>Top Rated Attraction</Text>
+                            <Text style={localStyles.trendingTitle} numberOfLines={1}>
+                              {place.label || (index % 2 === 0 ? 'Great Barrier Reef' : 'London City')}
+                            </Text>
+                          </View>
+                          <View>
+                            <View style={localStyles.trendingRatingRow}>
+                              <Ionicons name="star" size={13} color="#FF9F43" />
+                              <Text style={localStyles.trendingRating}>
+                                {Number(place.tags?.rating || 0).toFixed(1) || (index % 2 === 0 ? '4.9' : '4.7')}
+                              </Text>
+                            </View>
+                            <Text style={localStyles.trendingPrice}>
+                              {`${Number(place.tags?.userRatingsTotal || 0).toLocaleString()} ratings`}
+                            </Text>
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <View style={localStyles.trendingStateCard}>
+                    <Ionicons name="map-outline" size={16} color="#94A3B8" />
+                    <Text style={localStyles.trendingStateText}>No trending places available yet.</Text>
                   </View>
                 )}
               </View>
 
-              <View style={styles.gridRow}>
-                <View style={styles.gridColumn}>
-                  <Text style={styles.inputLabel}>Dates</Text>
-                  <TouchableOpacity activeOpacity={0.9} style={styles.inputRow} onPress={() => setShowDateRangePicker(true)}>
-                    <Ionicons name="calendar-outline" size={18} color="#FF6B6B" style={styles.inputIcon} />
-                    <Text style={localStyles.dateInputText}>
-                      {startDate && endDate ? `${formatIsoDate(startDate)} - ${formatIsoDate(endDate)}` : 'Select start & end date'}
-                    </Text>
-                  </TouchableOpacity>
-                  {!!durationDays && <Text style={localStyles.durationLabel}>Duration: {durationDays} day{durationDays > 1 ? 's' : ''}</Text>}
-                </View>
-
-                <View style={styles.gridColumn}>
-                  <Text style={styles.inputLabel}>Budget</Text>
-                  <TouchableOpacity activeOpacity={0.9} style={styles.inputRow} onPress={() => setShowBudgetPicker(true)}>
-                    <Ionicons name="cash-outline" size={18} color="#FF6B6B" style={styles.inputIcon} />
-                    <Text style={localStyles.budgetDropdownText}>
-                      {BUDGET_OPTIONS.find((option) => option.key === budget)?.label || 'Select budget'}
-                    </Text>
-                    <Ionicons name="chevron-down" size={16} color="#94A3B8" style={localStyles.budgetChevron} />
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <TouchableOpacity
-                activeOpacity={0.92}
-                style={styles.planButtonWrap}
-                onPress={startPlannerFlow}
-              >
-                <LinearGradient
-                  colors={['#FF6B6B', '#FF8E53']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.planButton}
-                >
-                  <>
-                    <Ionicons name="airplane-outline" size={18} color="#FFFFFF" />
-                    <Text style={styles.planButtonText}>Plan my Trip</Text>
-                  </>
-                </LinearGradient>
-              </TouchableOpacity>
-
-              <View style={styles.planTrustRow}>
-                <Ionicons name="shield-checkmark-outline" size={14} color="#0EA5E9" />
-                <Text style={styles.planTrustText}>Trusted planner - route, time and budget aware</Text>
-              </View>
-            </View>
-
-            <View style={localStyles.essentialsSection}>
-            <View style={styles.sectionHead}>
-                <Text style={styles.sectionTitle}>Trip Planning Essentials</Text>
-            </View>
-              <Text style={styles.essentialsSubtitle}>
-                Every trip uses smart route logic, balanced day pacing, and budget-aware suggestions.
-              </Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.essentialsCarouselRow}>
-                {TRIP_PLANNING_ESSENTIALS.map((item) => (
-                  <View key={item.id} style={styles.essentialSlideCard}>
-                    <View style={styles.essentialSlideHeader}>
-                      <View style={[styles.essentialSlideIconWrap, { backgroundColor: `${item.accent}1A` }]}>
-                        <Ionicons name={item.icon} size={18} color={item.accent} />
-                    </View>
-                      <Text style={styles.essentialSlideTitle}>{item.title}</Text>
-                  </View>
-                    <Text style={styles.essentialSlideDescription}>{item.description}</Text>
-                    <View style={styles.essentialSlideFooter}>
-                      <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                      <Text style={styles.essentialSlideFooterText}>Always included</Text>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
-            </View>
-
-            <View style={styles.recentTripsSection}>
-              <Text style={styles.sectionTitle}>Your Recent Trips</Text>
-              {isLoadingRecentTrips ? (
-                <View style={localStyles.recentTripsStateCard}>
-                  <ActivityIndicator size="small" color="#FF6B6B" />
-                  <Text style={localStyles.recentTripsStateText}>Loading your latest trips...</Text>
-                </View>
-              ) : recentTrips.length ? (
-                recentTrips.map((trip) => (
-                  <TouchableOpacity
-                    key={trip.id}
-                    activeOpacity={0.9}
-                    style={styles.recentTripCard}
-                    onPress={() => navigation.navigate('Trips')}
-                  >
-                    <Image
-                      source={{
-                        uri:
-                          trip.coverImageUrl ||
-                          'https://lh3.googleusercontent.com/aida-public/AB6AXuCxUVrLlyD4qcqI0PviLV-XWZV5gABYq2_0MGeW54LUPUzyLgpOI1CFB1mrF3--BeB3-GzPZf55uwZkYWsKcQS31GDYjQ2KVLFAw2nAfkKhjTVfUMDGF82sXabv01AClzwfydlaWb9xjBixmtFMV-r1ccBHzvbFx3Pxlq-pqnrYacyL0EnLjMUpRdXhqLKZBFh9Um2u1LhAMf_CzoTRFB3qT7g8-3hCqV1dF7--7v62PSTIV7wXr1-MBFBvABh-npUWkrl_gHZ5pG6a',
-                      }}
-                      style={styles.recentTripImage}
-                    />
-                    <View style={styles.recentTripBody}>
-                      <Text style={styles.recentTripTitle}>{trip.title}</Text>
-                      <Text style={styles.recentTripMeta}>
-                        {formatIsoDate(trip.startDate)} - {formatIsoDate(trip.endDate)} • {trip.stats?.totalStops || 0} stops
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={20} color="#FF6B6B" />
-                  </TouchableOpacity>
-                ))
-              ) : (
-                <View style={localStyles.recentTripsStateCard}>
-                  <Ionicons name="briefcase-outline" size={18} color="#94A3B8" />
-                  <Text style={localStyles.recentTripsStateText}>No recent trips yet. Plan one to see it here.</Text>
-                </View>
-              )}
-
-              <Animated.View
-                style={[
-                  styles.smartTipCard,
-                  {
-                    opacity: smartTipAnim,
-                    transform: [
-                      {
-                        translateY: smartTipAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [8, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <View style={styles.smartTipIcon}>
-                  <Ionicons name={currentSmartTip.icon} size={16} color="#FF8E53" />
-                </View>
-                <View style={styles.smartTipBody}>
-                  <Text style={styles.smartTipTitle}>{currentSmartTip.title}</Text>
-                  <Text style={styles.smartTipText}>{currentSmartTip.text}</Text>
-                  <View style={styles.smartTipDotsRow}>
-                    {SMART_TIPS.map((tip, index) => (
-                      <View
-                        key={tip.id}
-                        style={[styles.smartTipDot, index === smartTipIndex && styles.smartTipDotActive]}
+              <View style={localStyles.premiumChecklistCard}>
+                <Text style={localStyles.premiumChecklistTitle}>Pre-Planning Checklist</Text>
+                {PRE_PLANNING_TASKS.map((item) => {
+                  return (
+                    <View key={item.id} style={localStyles.premiumChecklistRow}>
+                      <Ionicons
+                        name={item.completed ? 'checkmark-circle' : 'ellipse-outline'}
+                        size={20}
+                        color={item.completed ? '#10B981' : '#CBD5E1'}
                       />
-                    ))}
-                  </View>
-                </View>
-              </Animated.View>
-            </View>
-
-            <View style={styles.sectionHead}>
-              <Text style={styles.sectionTitle}>Trending Experiences</Text>
-              <TouchableOpacity activeOpacity={0.8} onPress={() => navigation.navigate('Explore')}>
-                <Text style={styles.sectionAction}>Explore</Text>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.experiencesRow}>
-              {isLoadingLatestItineraries ? (
-                <View style={localStyles.trendingStateCard}>
-                  <ActivityIndicator size="small" color="#FF6B6B" />
-                  <Text style={localStyles.trendingStateText}>Loading latest itineraries...</Text>
-                </View>
-              ) : latestItineraries.length ? (
-                latestItineraries.map((trip) => (
-                  <TouchableOpacity key={trip.id} activeOpacity={0.92} style={styles.experienceCard}>
-                    <Image
-                      source={{
-                        uri:
-                          trip.coverImageUrl ||
-                          'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=1200&q=80',
-                      }}
-                      style={styles.experienceImage}
-                      resizeMode="cover"
-                    />
-                  <LinearGradient
-                    colors={['transparent', 'rgba(15,32,68,0.85)']}
-                    start={{ x: 0.5, y: 0.1 }}
-                    end={{ x: 0.5, y: 1 }}
-                    style={styles.experienceOverlay}
-                  >
-                      <Text style={styles.experienceTitle} numberOfLines={2}>
-                        {trip.from?.label || trip.title || 'Unknown place'}
-                      </Text>
-                    <View style={styles.experienceMeta}>
-                        <Ionicons name="time-outline" size={13} color="#E2E8F0" />
-                        <Text style={styles.experiencePlace}>{formatTripDurationDays(trip)}</Text>
+                      <Text style={localStyles.premiumChecklistText}>{item.label}</Text>
                     </View>
-                  </LinearGradient>
-                </TouchableOpacity>
-                ))
-              ) : (
-                <View style={localStyles.trendingStateCard}>
-                  <Ionicons name="map-outline" size={16} color="#94A3B8" />
-                  <Text style={localStyles.trendingStateText}>No itineraries yet. Create one to see it here.</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={styles.checklistCard}>
-              <View style={styles.checklistHeader}>
-                <Text style={styles.checklistTitle}>Pre-trip Checklist</Text>
-                <View style={styles.checklistBadge}>
-                  <Text style={styles.checklistBadgeText}>{TRAVEL_CHECKLIST.length} tasks</Text>
-                </View>
+                  );
+                })}
               </View>
-              {TRAVEL_CHECKLIST.map((item, index) => (
-                <View
-                  key={item.id}
-                  style={[styles.checklistRow, index !== TRAVEL_CHECKLIST.length - 1 && styles.checklistRowBorder]}
-                >
-                  <View style={styles.checklistIconWrap}>
-                    <Ionicons name={item.icon} size={16} color="#0EA5E9" />
-                  </View>
-                  <Text style={styles.checklistLabel}>{item.label}</Text>
-                  <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
-                </View>
-              ))}
-            </View>
-              </>
+
+              <View style={localStyles.premiumStackSection}>
+                <Text style={localStyles.premiumSectionTitle}>Community Vetted Tips</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.premiumHorizontalRow}>
+                  <Animated.View
+                    style={[
+                      localStyles.communityTipCard,
+                      {
+                        backgroundColor: COMMUNITY_TIPS[0].bg,
+                        borderColor: COMMUNITY_TIPS[0].border,
+                        opacity: smartTipAnim,
+                      },
+                    ]}
+                  >
+                    <View style={localStyles.communityTipTagRow}>
+                      <Ionicons name={COMMUNITY_TIPS[0].icon} size={16} color={COMMUNITY_TIPS[0].accent} />
+                      <Text style={[localStyles.communityTipTag, { color: COMMUNITY_TIPS[0].accent }]}>
+                        {COMMUNITY_TIPS[0].tag}
+                      </Text>
+                    </View>
+                    <Text style={localStyles.communityTipText}>{currentSmartTip?.text || COMMUNITY_TIPS[0].text}</Text>
+                  </Animated.View>
+
+                  {COMMUNITY_TIPS.slice(1).map((tip) => (
+                    <View
+                      key={tip.id}
+                      style={[
+                        localStyles.communityTipCard,
+                        {
+                          backgroundColor: tip.bg,
+                          borderColor: tip.border,
+                        },
+                      ]}
+                    >
+                      <View style={localStyles.communityTipTagRow}>
+                        <Ionicons name={tip.icon} size={16} color={tip.accent} />
+                        <Text style={[localStyles.communityTipTag, { color: tip.accent }]}>
+                          {tip.tag}
+                        </Text>
+                      </View>
+                      <Text style={localStyles.communityTipText}>{tip.text}</Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <View style={localStyles.premiumBottomSpacer} />
             </ScrollView>
           )}
         </View>
@@ -1030,17 +1117,462 @@ export default function HomeScreen({ styles }) {
   );
 }
 
-function formatTripDurationDays(trip) {
-  const durationDays = Number(trip?.durationDays || trip?.days?.length || 1);
-  if (!Number.isFinite(durationDays) || durationDays <= 1) {
-    return '1 day';
-  }
-  return `${durationDays} days`;
-}
-
 const localStyles = StyleSheet.create({
+  homeScreenBody: {
+    paddingHorizontal: 0,
+  },
+  premiumRoot: {
+    backgroundColor: '#F8F5F5',
+  },
   plannerScreenBody: {
     paddingHorizontal: 0,
+  },
+  premiumHeader: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(255,255,255,0.74)',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(226,232,240,0.7)',
+    zIndex: 8,
+  },
+  premiumAvatarWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 2,
+    borderColor: 'rgba(255,107,107,0.22)',
+    backgroundColor: '#FFFFFF',
+  },
+  premiumAvatar: {
+    width: '100%',
+    height: '100%',
+  },
+  premiumBrand: {
+    color: '#FF6B6B',
+    fontSize: 23,
+    fontWeight: '800',
+    letterSpacing: -0.25,
+  },
+  premiumBellButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 2,
+  },
+  premiumScrollContent: {
+    paddingHorizontal: 16,
+    paddingTop: 8,
+    paddingBottom: 20,
+  },
+  premiumPlannerCard: {
+    borderRadius: 26,
+    overflow: 'hidden',
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.46)',
+    shadowColor: '#FF6B6B',
+    shadowOpacity: 0.12,
+    shadowRadius: 22,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 5,
+  },
+  premiumHeroImage: {
+    width: '100%',
+    height: 224,
+    justifyContent: 'flex-end',
+  },
+  premiumHeroOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
+    paddingBottom: 18,
+  },
+  premiumHeroEyebrow: {
+    color: 'rgba(255,255,255,0.9)',
+    textTransform: 'uppercase',
+    letterSpacing: 1.1,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 6,
+  },
+  premiumHeroTitle: {
+    color: '#FFFFFF',
+    fontSize: 30,
+    lineHeight: 35,
+    fontWeight: '800',
+  },
+  premiumHeroSubtitle: {
+    marginTop: 7,
+    color: 'rgba(255,255,255,0.92)',
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '500',
+    maxWidth: '94%',
+  },
+  premiumPlannerBody: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 18,
+  },
+  premiumStarterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 8,
+  },
+  premiumStarterBar: {
+    width: 46,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: '#FF6B6B',
+  },
+  premiumStarterText: {
+    color: '#FF6B6B',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  premiumFieldBlock: {
+    marginBottom: 16,
+  },
+  premiumFieldLabel: {
+    marginBottom: 6,
+    color: '#94A3B8',
+    textTransform: 'uppercase',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.2,
+  },
+  premiumInputRow: {
+    minHeight: 55,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  premiumInputIcon: {
+    position: 'absolute',
+    left: 12,
+    top: 18,
+    zIndex: 2,
+  },
+  premiumTextInput: {
+    minHeight: 55,
+    borderRadius: 12,
+    paddingLeft: 40,
+    paddingRight: 42,
+    color: '#0F172A',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  premiumTwoColRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 2,
+  },
+  premiumCol: {
+    flex: 1,
+  },
+  premiumDropdownText: {
+    minHeight: 55,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    lineHeight: 55,
+    paddingLeft: 40,
+    paddingRight: 32,
+    color: '#334155',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  premiumChevron: {
+    position: 'absolute',
+    right: 10,
+    top: 20,
+  },
+  premiumPlanButtonWrap: {
+    marginTop: 12,
+  },
+  premiumPlanButton: {
+    minHeight: 56,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    shadowColor: '#FF6B6B',
+    shadowOpacity: 0.26,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  premiumPlanButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  premiumSectionHead: {
+    marginTop: 24,
+    marginBottom: 14,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+  },
+  premiumSectionTitle: {
+    color: '#0F172A',
+    fontSize: 19,
+    fontWeight: '800',
+  },
+  inlineLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  inlineLinkText: {
+    color: '#FF6B6B',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  premiumHorizontalRow: {
+    gap: 12,
+    paddingRight: 12,
+  },
+  skeletonBase: {
+    overflow: 'hidden',
+    backgroundColor: '#E2E8F0',
+    borderRadius: 10,
+  },
+  skeletonShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 130,
+  },
+  skeletonShimmerGradient: {
+    flex: 1,
+  },
+  skeletonRecentRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  journeyCard: {
+    width: 160,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    padding: 10,
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
+  },
+  journeyImage: {
+    width: '100%',
+    height: 96,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  journeyTitle: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  journeyMeta: {
+    marginTop: 2,
+    color: '#94A3B8',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  skeletonJourneyImage: {
+    width: '100%',
+    height: 96,
+    borderRadius: 12,
+    marginBottom: 8,
+  },
+  skeletonJourneyTitle: {
+    width: '78%',
+    height: 13,
+    borderRadius: 6,
+    marginBottom: 7,
+  },
+  skeletonJourneyMeta: {
+    width: '62%',
+    height: 10,
+    borderRadius: 6,
+  },
+  premiumStackSection: {
+    marginTop: 24,
+    gap: 12,
+  },
+  premiumSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  trendingCard: {
+    height: 192,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: '#CBD5E1',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.08,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+  trendingImage: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+  },
+  trendingOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 14,
+  },
+  skeletonTrendingImage: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 16,
+    backgroundColor: '#CBD5E1',
+  },
+  skeletonTrendingBottom: {
+    position: 'absolute',
+    left: 14,
+    right: 14,
+    bottom: 14,
+  },
+  skeletonTrendingCountry: {
+    width: 110,
+    height: 10,
+    borderRadius: 6,
+    marginBottom: 8,
+    backgroundColor: '#94A3B8',
+  },
+  skeletonTrendingTitle: {
+    width: '68%',
+    height: 22,
+    borderRadius: 8,
+    marginBottom: 9,
+    backgroundColor: '#E2E8F0',
+  },
+  skeletonTrendingMeta: {
+    width: 96,
+    height: 11,
+    borderRadius: 6,
+    backgroundColor: '#CBD5E1',
+  },
+  trendingBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  trendingTextCol: {
+    flex: 1,
+  },
+  trendingCountry: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 11,
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  trendingTitle: {
+    color: '#FFFFFF',
+    fontSize: 21,
+    fontWeight: '800',
+  },
+  trendingRatingRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 4,
+  },
+  trendingRating: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  trendingPrice: {
+    marginTop: 2,
+    color: '#FFFFFF',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  premiumChecklistCard: {
+    marginTop: 24,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    backgroundColor: '#FFFFFF',
+    padding: 18,
+    gap: 10,
+  },
+  premiumChecklistTitle: {
+    color: '#0F172A',
+    fontSize: 19,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  premiumChecklistRow: {
+    minHeight: 50,
+    borderRadius: 12,
+    backgroundColor: '#F8FAFC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+  },
+  premiumChecklistText: {
+    color: '#0F172A',
+    fontSize: 15,
+    fontWeight: '500',
+    flex: 1,
+  },
+  communityTipCard: {
+    width: 262,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+  },
+  communityTipTagRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 8,
+  },
+  communityTipTag: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  communityTipText: {
+    color: '#1A2A6C',
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '600',
+  },
+  premiumBottomSpacer: {
+    height: 8,
   },
   fromInputWithLiveButton: {
     paddingRight: 42,
@@ -1048,7 +1580,7 @@ const localStyles = StyleSheet.create({
   liveLocationButton: {
     position: 'absolute',
     right: 10,
-    top: 14,
+    top: 13.5,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -1702,7 +2234,52 @@ const localStyles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  loaderOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loaderCard: {
+    width: 280,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 32,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 10,
+  },
+  loaderIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(14, 165, 233, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  loaderTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  loaderSubtitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748B',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  loaderSpinner: {
+    transform: [{ scale: 1.2 }],
+  },
 });
+
 
 
 

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, AppState, StyleSheet, View } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
+import { ActivityIndicator, AppState, StatusBar, StyleSheet, View } from 'react-native';
 // import * as Google from 'expo-auth-session/providers/google';
 // import * as WebBrowser from 'expo-web-browser';
 // import { GoogleAuthProvider, signInWithCredential, signOut } from 'firebase/auth';
@@ -262,7 +261,12 @@ export default function App() {
 
   return (
     <>
-      <StatusBar style="dark" hidden={false} />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor="#FFFFFF"
+        translucent={false}
+        hidden={false}
+      />
       {content}
     </>
   );

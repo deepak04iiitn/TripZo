@@ -99,6 +99,15 @@ function recommendationTypeMeta(type) {
       markerText: 'A',
     };
   }
+  if (type === 'medical') {
+    return {
+      icon: 'medkit-outline',
+      color: '#16A34A',
+      bg: 'rgba(22,163,74,0.16)',
+      label: 'Medical',
+      markerText: 'M',
+    };
+  }
   return {
     icon: 'water-outline',
     color: '#0F766E',
@@ -199,7 +208,7 @@ function flattenTripData(trip, options = {}) {
         (item) =>
           Number.isFinite(item?.place?.latitude) &&
           Number.isFinite(item?.place?.longitude) &&
-          (item.type === 'restaurant' || item.type === 'atm' || item.type === 'washroom')
+          (item.type === 'restaurant' || item.type === 'atm' || item.type === 'washroom' || item.type === 'medical')
       )
       .map((item, recommendationIndex) => ({
         key: `recommendation-${item.type}-${stop.id || stopIndex}-${recommendationIndex}`,
@@ -267,6 +276,7 @@ export default function MapScreen({ styles }) {
     restaurant: true,
     atm: true,
     washroom: true,
+    medical: true,
   });
 
   const loadTrips = useCallback(async () => {
@@ -364,9 +374,10 @@ export default function MapScreen({ styles }) {
         if (item.type === 'restaurant') return mapFilters.restaurant;
         if (item.type === 'atm') return mapFilters.atm;
         if (item.type === 'washroom') return mapFilters.washroom;
+        if (item.type === 'medical') return mapFilters.medical;
         return true;
       }),
-    [mapFilters.atm, mapFilters.restaurant, mapFilters.washroom, recommendationNodes]
+    [mapFilters.atm, mapFilters.restaurant, mapFilters.washroom, mapFilters.medical, recommendationNodes]
   );
 
   const mapRegion = useMemo(
@@ -398,7 +409,7 @@ export default function MapScreen({ styles }) {
     setTrackMarkerViews(true);
     const timer = setTimeout(() => setTrackMarkerViews(false), MARKER_TRACK_DISABLE_DELAY_MS);
     return () => clearTimeout(timer);
-  }, [selectedTripId, selectedDayNumber, mapFilters.start, mapFilters.stops, mapFilters.restaurant, mapFilters.atm, mapFilters.washroom]);
+  }, [selectedTripId, selectedDayNumber, mapFilters.start, mapFilters.stops, mapFilters.restaurant, mapFilters.atm, mapFilters.washroom, mapFilters.medical]);
 
   useEffect(() => {
     let cancelled = false;
@@ -690,6 +701,12 @@ export default function MapScreen({ styles }) {
                   >
                     <Text style={[screenStyles.filterChipText, mapFilters.washroom && screenStyles.filterChipTextActive]}>Washrooms</Text>
                   </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => toggleFilter('medical')}
+                    style={[screenStyles.filterChip, mapFilters.medical && screenStyles.filterChipActive]}
+                  >
+                    <Text style={[screenStyles.filterChipText, mapFilters.medical && screenStyles.filterChipTextActive]}>Medical</Text>
+                  </TouchableOpacity>
                   </ScrollView>
                 )}
                 {!selectedTrip && (
@@ -747,7 +764,8 @@ export default function MapScreen({ styles }) {
                     {activeMarker.type === 'stop' && <Ionicons name="location-outline" size={18} color="#FF6B6B" />}
                     {(activeMarker.type === 'restaurant' ||
                       activeMarker.type === 'atm' ||
-                      activeMarker.type === 'washroom') && (
+                      activeMarker.type === 'washroom' ||
+                      activeMarker.type === 'medical') && (
                       <Ionicons
                         name={recommendationTypeMeta(activeMarker.type).icon}
                         size={18}

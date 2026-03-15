@@ -3,12 +3,12 @@ import {
   View,
   Text,
   StyleSheet,
+  StatusBar,
   Dimensions,
   TouchableOpacity,
   FlatList,
   PanResponder,
 } from 'react-native';
-import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import Svg1 from '../assets/svg-1.svg';
@@ -34,7 +34,7 @@ const slides = [
     titleLight: 'EXPLORE MORE,',
     titleBold:  'WASTE LESS TIME.',
     description:
-      "Stop wasting hours on back-and-forth routes. TripZo auto-builds optimized itineraries around your location, time, and interests - cutting transit by up to 40% so you see far more of what matters.",
+      "Stop wasting hours planning routes. TripZo acts like your personal travel guide - building optimized itineraries and showing the best path while recommending nearby restaurants, washrooms, ATMs, and medical stores along the way.",
   },
   {
     id: '2',
@@ -42,7 +42,7 @@ const slides = [
     titleLight: 'YOUR PERFECT TRIP,',
     titleBold:  'FULLY AUTOMATED.',
     description:
-    "TripZo plans every journey using our 3-pillar RTC framework - Route Optimized, Time Optimized, and Cost Optimized - so you travel smarter, faster, and within your budget.",
+    "TripZo plans every journey using 3-pillar RTC framework - Route Optimized, Time Optimized, and Cost Optimized - so you travel smarter, faster, and within your budget.",
   },
 ];
 
@@ -117,7 +117,11 @@ export default function OnboardingScreen({ onFinish }) {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar
+        barStyle="dark-content"
+        backgroundColor={CORAL}
+        translucent={false}
+      />
 
       {/* Scrollable illustrations — taller than the sheet so they show above it */}
       <FlatList

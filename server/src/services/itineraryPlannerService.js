@@ -26,6 +26,9 @@ const WASHROOM_MIN_GAP_STOPS = 2;
 const MAX_RESTAURANT_RECOMMENDATIONS_PER_DAY = 3;
 const MAX_ATM_RECOMMENDATIONS_PER_DAY = 1;
 const MAX_WASHROOM_RECOMMENDATIONS_PER_DAY = 1;
+const MEDICAL_STOP_INTERVAL = 6;
+const MEDICAL_MIN_GAP_STOPS = 5;
+const MAX_MEDICAL_RECOMMENDATIONS_PER_DAY = 1;
 
 const BUDGET_RANGES = {
   $: { min: 1, max: 2 },
@@ -696,6 +699,7 @@ async function getNearbyAmenity({ amenity, latitude, longitude, radiusMeters, li
     restaurant: { type: 'restaurant' },
     atm: { type: 'atm' },
     toilets: { type: 'establishment', keyword: 'public toilet' },
+    medical: { type: 'pharmacy', keyword: 'medical store clinic pharmacy' },
   };
   const { type, keyword } = typeMap[amenity] || { type: amenity };
 
@@ -729,10 +733,36 @@ async function getNearbyAmenity({ amenity, latitude, longitude, radiusMeters, li
         return true;
       }
 
+      if (amenity === 'medical') {
+        // Accept pharmacies, hospitals, clinics, doctors, and health establishments.
+        const hasMedicalType = placeTypes.some((t) =>
+          ['pharmacy', 'drugstore', 'hospital', 'doctor', 'health', 'dentist'].includes(t)
+        );
+        const hasMedicalKeyword = [
+          'pharmacy',
+          'medical',
+          'clinic',
+          'hospital',
+          'chemist',
+          'drugstore',
+          'health',
+          'dispensary',
+        ].some((kw) => lowerName.includes(kw));
+        return hasMedicalType || hasMedicalKeyword;
+      }
+
       return true;
     });
 
-    return strictAmenityResults.map(normalizeGooglePlace).slice(0, limit);
+    // Rank by userRatingsTotal first (popularity), then by rating value.
+    const sorted = [...strictAmenityResults].sort((a, b) => {
+      const ratingsA = Number(a.user_ratings_total || 0);
+      const ratingsB = Number(b.user_ratings_total || 0);
+      if (ratingsA !== ratingsB) return ratingsB - ratingsA;
+      return Number(b.rating || 0) - Number(a.rating || 0);
+    });
+
+    return sorted.map(normalizeGooglePlace).slice(0, limit);
   } catch (_error) {
     return [];
   }
@@ -1164,9 +1194,11 @@ export async function generateItineraryPlan(payload) {
   let lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
   let lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
   let lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+  let lastMedicalRecommendationAt = Number.NEGATIVE_INFINITY;
   let restaurantsRecommendedToday = 0;
   let atmsRecommendedToday = 0;
   let washroomsRecommendedToday = 0;
+  let medicalsRecommendedToday = 0;
 
   for (let stopIndex = 0; stopIndex < orderedAttractions.length; stopIndex += 1) {
     const stop = orderedAttractions[stopIndex];
@@ -1191,9 +1223,11 @@ export async function generateItineraryPlan(payload) {
       lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
       lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
       lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+      lastMedicalRecommendationAt = Number.NEGATIVE_INFINITY;
       restaurantsRecommendedToday = 0;
       atmsRecommendedToday = 0;
       washroomsRecommendedToday = 0;
+      medicalsRecommendedToday = 0;
     }
 
     const stopRuntimeMinutes = dayMinutes + travelMinutes + visitMinutes;
@@ -1203,6 +1237,7 @@ export async function generateItineraryPlan(payload) {
     const restaurantGap = dayStopPosition - lastRestaurantRecommendationAt;
     const atmGap = dayStopPosition - lastAtmRecommendationAt;
     const washroomGap = dayStopPosition - lastWashroomRecommendationAt;
+    const medicalGap = dayStopPosition - lastMedicalRecommendationAt;
 
     // Restaurant recommendation
     const shouldRecommendMeal =
@@ -1226,11 +1261,18 @@ export async function generateItineraryPlan(payload) {
       ]);
 
       const budgetRange = BUDGET_RANGES[payload.budget] || BUDGET_RANGES.$$;
-      const filtered = restaurants.filter((r) => {
+      // Filter by budget price level, then rank by popularity (userRatingsTotal) first, rating value second.
+      const withinBudget = restaurants.filter((r) => {
         const level = derivePriceLevel(r.tags);
         return level >= budgetRange.min && level <= budgetRange.max;
       });
-      const topRestaurant = filtered[0] || restaurants[0];
+      const pool = withinBudget.length ? withinBudget : restaurants;
+      const topRestaurant = [...pool].sort((a, b) => {
+        const ratingCountA = Number(a.tags?.userRatingsTotal || 0);
+        const ratingCountB = Number(b.tags?.userRatingsTotal || 0);
+        if (ratingCountA !== ratingCountB) return ratingCountB - ratingCountA;
+        return Number(b.tags?.rating || 0) - Number(a.tags?.rating || 0);
+      })[0];
       if (topRestaurant) {
         recommendations.push({ type: 'restaurant', reason: 'Meal time or logical sightseeing break', place: topRestaurant });
         lastRestaurantRecommendationAt = dayStopPosition;
@@ -1276,6 +1318,24 @@ export async function generateItineraryPlan(payload) {
       }
     }
 
+    // Medical shop / clinic recommendation
+    const needsMedical =
+      dayStopPosition % MEDICAL_STOP_INTERVAL === 0 ||
+      (looksCommercialOrTransit(stop.label) && medicalGap >= MEDICAL_MIN_GAP_STOPS);
+    if (
+      shouldEnrichStop &&
+      needsMedical &&
+      medicalGap >= MEDICAL_MIN_GAP_STOPS &&
+      medicalsRecommendedToday < MAX_MEDICAL_RECOMMENDATIONS_PER_DAY
+    ) {
+      const medical = await fetchSmartRecommendation('medical', stop, 1500, 'Medical Shop');
+      if (medical) {
+        recommendations.push({ type: 'medical', reason: 'Nearest pharmacy or clinic on route', place: medical });
+        lastMedicalRecommendationAt = dayStopPosition;
+        medicalsRecommendedToday += 1;
+      }
+    }
+
     dayStops.push({
       sequence: stopIndex + 1,
       id: stop.id,
@@ -1313,9 +1373,11 @@ export async function generateItineraryPlan(payload) {
       lastRestaurantRecommendationAt = Number.NEGATIVE_INFINITY;
       lastAtmRecommendationAt = Number.NEGATIVE_INFINITY;
       lastWashroomRecommendationAt = Number.NEGATIVE_INFINITY;
+      lastMedicalRecommendationAt = Number.NEGATIVE_INFINITY;
       restaurantsRecommendedToday = 0;
       atmsRecommendedToday = 0;
       washroomsRecommendedToday = 0;
+      medicalsRecommendedToday = 0;
     }
   }
 

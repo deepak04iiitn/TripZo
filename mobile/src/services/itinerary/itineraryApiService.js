@@ -44,6 +44,19 @@ export async function listTripsApi() {
   }
 }
 
+export async function listRecentTripsApi() {
+  try {
+    const response = await apiClient.get('/api/trips/recent');
+    return {
+      trips: response.data?.trips || [],
+      userTripCount: Number(response.data?.userTripCount ?? 0),
+    };
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to load recent trips.'));
+  }
+}
+
+
 export async function updateTripStatusApi(tripId, status) {
   try {
     const response = await apiClient.patch(`/api/trips/${tripId}/status`, { status });
@@ -86,6 +99,15 @@ export async function listLatestTripsApi(params = {}) {
     return response.data?.trips || [];
   } catch (error) {
     throw new Error(getApiErrorMessage(error, 'Failed to load latest itineraries.'));
+  }
+}
+
+export async function listTrendingAttractionsApi(params = {}) {
+  try {
+    const response = await apiClient.get('/api/trips/trending-attractions', { params });
+    return response.data?.attractions || [];
+  } catch (error) {
+    throw new Error(getApiErrorMessage(error, 'Failed to load trending attractions.'));
   }
 }
 
