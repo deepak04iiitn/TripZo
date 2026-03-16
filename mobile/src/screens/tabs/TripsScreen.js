@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   Alert,
@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -125,6 +125,7 @@ function recommendationMeta(type) {
 
 export default function TripsScreen({ styles }) {
   const navigation = useNavigation();
+  const route = useRoute();
   const [activeTab, setActiveTab] = useState('all');
   const [tripBuckets, setTripBuckets] = useState({ all: [], saved: [], ongoing: [], upcoming: [], completed: [] });
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -257,6 +258,21 @@ export default function TripsScreen({ styles }) {
     [tripBuckets]
   );
 
+  useEffect(() => {
+    const incomingTripId = route?.params?.openTripId;
+    if (!incomingTripId) {
+      return;
+    }
+    const availableTrips = [...(tripBuckets.all || []), ...(tripBuckets.saved || [])];
+    const matchedTrip = availableTrips.find((trip) => String(trip.id) === String(incomingTripId));
+    if (!matchedTrip) {
+      return;
+    }
+    setActiveTab('all');
+    setSelectedTrip(matchedTrip);
+    navigation.setParams?.({ openTripId: undefined });
+  }, [navigation, route?.params?.openTripId, tripBuckets.all, tripBuckets.saved]);
+
   if (selectedTrip) {
     return (
       <SafeAreaView style={styles.screenSafe} edges={['top']}>
@@ -309,6 +325,29 @@ export default function TripsScreen({ styles }) {
                 </View>
                 <TouchableOpacity style={screenStyles.shareBtn}>
                   <Ionicons name="share-social-outline" size={16} color="#FF6B6B" />
+                </TouchableOpacity>
+              </View>
+              <View style={screenStyles.detailActionsRow}>
+                <TouchableOpacity
+                  activeOpacity={0.92}
+                  onPress={() => openTripOnMap(selectedTrip)}
+                  style={screenStyles.detailMapCta}
+                >
+                  <LinearGradient
+                    colors={['#0F2044', '#1E3A8A']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={screenStyles.detailMapCtaGradient}
+                  >
+                    <View style={screenStyles.detailMapCtaIconWrap}>
+                      <Ionicons name="map-outline" size={18} color="#FFFFFF" />
+                    </View>
+                    <View style={screenStyles.detailMapCtaTextWrap}>
+                      <Text style={screenStyles.detailMapCtaTitle}>View in Map</Text>
+                      <Text style={screenStyles.detailMapCtaSubtitle}>See the full route, day by day</Text>
+                    </View>
+                    <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
+                  </LinearGradient>
                 </TouchableOpacity>
               </View>
 
@@ -1015,6 +1054,51 @@ const screenStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,107,107,0.1)',
+  },
+  detailActionsRow: {
+    marginTop: 10,
+    paddingHorizontal: 8,
+  },
+  detailMapCta: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    shadowColor: '#0F2044',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  detailMapCtaGradient: {
+    minHeight: 62,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  detailMapCtaIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  detailMapCtaTextWrap: {
+    flex: 1,
+  },
+  detailMapCtaTitle: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '800',
+  },
+  detailMapCtaSubtitle: {
+    marginTop: 2,
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 11,
+    fontWeight: '600',
   },
   itinerarySection: {
     marginTop: 16,

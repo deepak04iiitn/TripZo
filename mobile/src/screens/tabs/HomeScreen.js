@@ -779,9 +779,9 @@ export default function HomeScreen({ styles }) {
               budget={budget}
               triggerHaptic={triggerHaptic}
               onBack={() => setPlannerView('form')}
-              onTripSaved={async () => {
+              onTripSaved={async (savedTrip) => {
                 setPlannerView('form');
-                navigation.navigate('Trips');
+                navigation.navigate('Trips', savedTrip?.id ? { openTripId: savedTrip.id } : undefined);
               }}
             />
           ) : (

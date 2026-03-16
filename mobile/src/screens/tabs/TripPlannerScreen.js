@@ -319,12 +319,12 @@ export default function TripPlannerScreen({
         selectedAttractions: selectedForPlan,
       });
 
-      await saveTrip(itinerary);
+      const savedTrip = await saveTrip(itinerary);
       setPlanningProgress(100);
       setPlanningStep('Trip ready! Opening your Trips section...');
       setTimeout(async () => {
         setIsPlanningTrip(false);
-        await onTripSaved?.();
+        await onTripSaved?.(savedTrip || itinerary);
       }, 380);
     } catch (error) {
       setIsPlanningTrip(false);
