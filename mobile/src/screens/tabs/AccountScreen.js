@@ -581,7 +581,7 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
   }
 
   const displayAvatar = profile?.profileImageUrl || ACCOUNT_PROFILE.avatar;
-  const displayName = profile?.fullName || ACCOUNT_PROFILE.name;
+  const displayName = profile?.fullName?.trim() || '';
   const displayUsername = profile?.username ? `@${profile.username}` : ACCOUNT_PROFILE.username;
   const displayEmail = profile?.email || user?.email || ACCOUNT_PROFILE.email;
 
@@ -608,7 +608,7 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                   <Ionicons name="camera-outline" size={14} color="#FF6B6B" />
                 )}
               </TouchableOpacity>
-              <Text style={styles.accountName}>{displayName}</Text>
+              {!!displayName && <Text style={styles.accountName}>{displayName}</Text>}
               <Text style={styles.accountUsername}>{displayUsername}</Text>
             </View>
 
