@@ -8,6 +8,7 @@ import {
   validateTripCreationPayload,
   validateTripStatusPayload,
 } from '../utils/validators.js';
+import { checkAndIncrementItineraryLimit } from '../services/userLimitService.js';
 
 function normalizeTripStatus(tripDoc) {
   const now = new Date();
@@ -159,6 +160,8 @@ export async function generateTripDraft(req, res, next) {
       return res.status(400).json({ message: errors[0], errors });
     }
 
+    await checkAndIncrementItineraryLimit(req.auth.userId);
+
     const draft = await generateItineraryPlan(value);
     return res.json({
       message: 'Itinerary generated successfully.',
@@ -192,6 +195,8 @@ export async function createTrip(req, res, next) {
     if (errors.length) {
       return res.status(400).json({ message: errors[0], errors });
     }
+
+    await checkAndIncrementItineraryLimit(req.auth.userId);
 
     const trip = await Trip.create({
       ...value,

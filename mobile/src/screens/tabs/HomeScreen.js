@@ -772,6 +772,7 @@ export default function HomeScreen({ styles }) {
         >
           {plannerView === 'planning' ? (
             <TripPlannerScreen
+              navigation={navigation}
               fromLocation={fromLocation}
               fromSelectedPlace={fromSelectedPlace}
               startDate={startDate}

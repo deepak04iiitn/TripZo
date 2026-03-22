@@ -5,6 +5,7 @@ import {
   Animated,
   FlatList,
   Image,
+  Modal,
   PanResponder,
   Platform,
   Pressable,
@@ -125,6 +126,7 @@ const AttractionItem = React.memo(({ place, index, selected, onToggle, triggerHa
 });
 
 export default function TripPlannerScreen({
+  navigation,
   fromLocation,
   fromSelectedPlace,
   startDate,
@@ -135,6 +137,7 @@ export default function TripPlannerScreen({
   triggerHaptic,
 }) {
   const [plannerResolvedLocation, setPlannerResolvedLocation] = useState(null);
+  const [isLimitModalVisible, setIsLimitModalVisible] = useState(false);
   const [cityAttractions, setCityAttractions] = useState([]);
   const [previewCityName, setPreviewCityName] = useState('');
   const [selectedAttractionIds, setSelectedAttractionIds] = useState([]);
@@ -328,7 +331,11 @@ export default function TripPlannerScreen({
       }, 380);
     } catch (error) {
       setIsPlanningTrip(false);
-      Alert.alert('Unable to generate trip', error.message || 'Please try again.');
+      if (error.status === 429) {
+        setIsLimitModalVisible(true);
+      } else {
+        Alert.alert('Unable to generate trip', error.message || 'Please try again.');
+      }
     } finally {
       clearInterval(progressTimer);
     }
@@ -564,6 +571,44 @@ export default function TripPlannerScreen({
           </LinearGradient>
         </View>
       ) : null}
+
+      <Modal
+        visible={isLimitModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsLimitModalVisible(false)}
+      >
+        <View style={styles.limitModalOverlay}>
+          <View style={styles.limitModalCard}>
+            <View style={styles.limitModalIconWrap}>
+              <Ionicons name="alert-circle" size={42} color="#FF6B6B" />
+            </View>
+            <Text style={styles.limitModalTitle}>Daily Limit Reached</Text>
+            <Text style={styles.limitModalText}>
+              You have reached your daily limit of itinerary generation, come back tomorrow, till then u can explore other's itineraries in explore tab
+            </Text>
+            <View style={styles.limitModalActions}>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.limitModalSecondaryBtn}
+                onPress={() => setIsLimitModalVisible(false)}
+              >
+                <Text style={styles.limitModalSecondaryText}>Maybe Later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                style={styles.limitModalPrimaryBtn}
+                onPress={() => {
+                  setIsLimitModalVisible(false);
+                  navigation?.navigate('Explore');
+                }}
+              >
+                <Text style={styles.limitModalPrimaryText}>Explore Itineraries</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1083,5 +1128,76 @@ const styles = StyleSheet.create({
   },
   startupLoaderSkeletonRowShort: {
     width: '82%',
+  },
+  limitModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15,23,42,0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  limitModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 24,
+    alignItems: 'center',
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.15,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  limitModalIconWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,107,107,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 20,
+  },
+  limitModalTitle: {
+    color: '#0F2044',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 12,
+    textAlign: 'center',
+  },
+  limitModalText: {
+    color: '#64748B',
+    fontSize: 15,
+    lineHeight: 22,
+    textAlign: 'center',
+    marginBottom: 28,
+  },
+  limitModalActions: {
+    width: '100%',
+    gap: 12,
+  },
+  limitModalPrimaryBtn: {
+    height: 54,
+    borderRadius: 14,
+    backgroundColor: '#FF6B6B',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  limitModalPrimaryText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '800',
+  },
+  limitModalSecondaryBtn: {
+    height: 50,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  limitModalSecondaryText: {
+    color: '#64748B',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

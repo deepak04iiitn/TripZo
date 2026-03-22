@@ -1,7 +1,13 @@
 import { apiClient } from '../api/client';
 
-function getApiErrorMessage(error, fallback) {
-  return error?.response?.data?.message || fallback;
+function getApiError(error, fallback) {
+  const message = error?.response?.data?.message || fallback;
+  const status = error?.response?.status;
+  const err = new Error(message);
+  if (status) {
+    err.status = status;
+  }
+  return err;
 }
 
 export async function generateTripDraftApi(payload) {
@@ -9,7 +15,7 @@ export async function generateTripDraftApi(payload) {
     const response = await apiClient.post('/api/trips/generate', payload);
     return response.data?.trip;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, 'Failed to generate itinerary.'));
+    throw getApiError(error, 'Failed to generate itinerary.');
   }
 }
 
@@ -31,7 +37,7 @@ export async function createTripApi(payload) {
     const response = await apiClient.post('/api/trips', payload);
     return response.data?.trip;
   } catch (error) {
-    throw new Error(getApiErrorMessage(error, 'Failed to save trip.'));
+    throw getApiError(error, 'Failed to save trip.');
   }
 }
 

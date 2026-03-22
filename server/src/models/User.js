@@ -74,6 +74,16 @@ const userSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    itineraryCountToday: {
+      type: Number,
+      default: 0,
+      index: true,
+    },
+    lastItineraryDate: {
+      type: String,
+      default: '',
+      index: true,
+    },
   },
   {
     timestamps: true,
