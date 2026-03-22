@@ -28,7 +28,7 @@ const ACCOUNT_PROFILE = {
   username: '@alex_travels',
   email: 'alex.coastal@tripzo.com',
   avatar:
-    'https://lh3.googleusercontent.com/aida-public/AB6AXuCH3W_7GJLfMHn090YaXxgjyfo5Bd3q7OlxoVAe_zgLV3b4TJNMAq33zAvrAT7c7wC7tuY5MKubJUaAiVMcvmI9lWoZ-XhUadE64z0vntlEZoRj_fUuGoi1IlFRBVi4TXcEE83IE6voCRbuLoSX376v4XxIrCszUtV30iKjCQPG0P_XQmOxgmbj-1vf6BnDcdj3VRUxcU5_gy0CWCLLSQeWIxvGG0Z33BAYdH0PhyXy12AsTl-9CN32f-mWoDVyx5xckD8OX9xxvn0s',
+    'https://img.freepik.com/premium-vector/user-profile-icon-flat-style-member-avatar-vector-illustration-isolated-background-human-permission-sign-business-concept_157943-15752.jpg?semt=ais_hybrid&w=740&q=80',
 };
 
 export default function AccountScreen({ user, onLogout, onDeleteAccount, styles }) {
@@ -310,10 +310,40 @@ export default function AccountScreen({ user, onLogout, onDeleteAccount, styles 
                 <SkeletonBlock style={accountSkeletonStyles.name} />
                 <SkeletonBlock style={accountSkeletonStyles.username} />
               </View>
-              <SkeletonBlock style={accountSkeletonStyles.card} />
-              <SkeletonBlock style={accountSkeletonStyles.card} />
-              <SkeletonBlock style={accountSkeletonStyles.action} />
-              <SkeletonBlock style={accountSkeletonStyles.action} />
+
+              <View style={styles.accountSection}>
+                <SkeletonBlock style={accountSkeletonStyles.sectionHeading} />
+                <View style={styles.accountCard}>
+                  <View style={accountSkeletonStyles.row}>
+                    <SkeletonBlock style={accountSkeletonStyles.rowIcon} />
+                    <SkeletonBlock style={accountSkeletonStyles.rowText} />
+                  </View>
+                  <View style={accountSkeletonStyles.row}>
+                    <SkeletonBlock style={accountSkeletonStyles.rowIcon} />
+                    <SkeletonBlock style={accountSkeletonStyles.rowText} />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.accountSection}>
+                <SkeletonBlock style={accountSkeletonStyles.sectionHeading} />
+                <View style={styles.accountCard}>
+                  <View style={accountSkeletonStyles.row}>
+                    <SkeletonBlock style={accountSkeletonStyles.rowIcon} />
+                    <SkeletonBlock style={accountSkeletonStyles.rowText} />
+                  </View>
+                  <View style={accountSkeletonStyles.row}>
+                    <SkeletonBlock style={accountSkeletonStyles.rowIcon} />
+                    <SkeletonBlock style={accountSkeletonStyles.rowText} />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.accountActions}>
+                <SkeletonBlock style={accountSkeletonStyles.action} />
+                <SkeletonBlock style={accountSkeletonStyles.action} />
+                <SkeletonBlock style={accountSkeletonStyles.action} />
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -798,11 +828,36 @@ const accountSkeletonStyles = StyleSheet.create({
     width: '100%',
     minHeight: 132,
     borderRadius: 16,
+    marginBottom: 10,
   },
   action: {
     width: '100%',
     height: 50,
     borderRadius: 12,
+    marginBottom: 12,
+  },
+  sectionHeading: {
+    width: 140,
+    height: 14,
+    borderRadius: 6,
+    marginLeft: 6,
+    marginBottom: 12,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  rowIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+  },
+  rowText: {
+    flex: 1,
+    height: 14,
+    borderRadius: 6,
   },
 });
 

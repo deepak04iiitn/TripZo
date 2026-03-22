@@ -323,10 +323,7 @@ export default function TripsScreen({ styles }) {
                     <Text style={screenStyles.summaryValue}>{selectedTrip.stats?.totalStops || 0}</Text>
                   </View>
                 </View>
-                <TouchableOpacity style={screenStyles.shareBtn}>
-                  <Ionicons name="share-social-outline" size={16} color="#FF6B6B" />
-                </TouchableOpacity>
-              </View>
+                </View>
               <View style={screenStyles.detailActionsRow}>
                 <TouchableOpacity
                   activeOpacity={0.92}
@@ -1046,14 +1043,6 @@ const screenStyles = StyleSheet.create({
     color: '#0F172A',
     fontSize: 18,
     fontWeight: '800',
-  },
-  shareBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(255,107,107,0.1)',
   },
   detailActionsRow: {
     marginTop: 10,
